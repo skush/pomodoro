@@ -20,7 +20,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | # | Step | Source | Size | Status |
 |---|---|---|:---:|---|
 | 1 | Materialize the greenfield skeleton | `architecture-map.md` §Stack | XS | shipped |
-| 2 | Core timer engine + controls | `idea-brief.md` §1 Raw idea | S | idea |
+| 2 | [Core timer engine + controls](features/core-timer/spec.md) | `idea-brief.md` §1 Raw idea | XS | spec'd |
 | 3 | Session tracking (task label + daily counter) | `idea-brief.md` §1 Raw idea | XS | idea |
 | 4 | Adjustable durations | `idea-brief.md` §7 Recommendation | XS | idea |
 | 5 | Sensory feedback (progress ring, tab-title mirror, chime, dark UI) — deferred, built last | `idea-brief.md` §1 Raw idea | S | idea |
