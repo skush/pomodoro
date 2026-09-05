@@ -1,0 +1,50 @@
+{
+  "slug": "_scaffold",
+  "tasks": [
+    {
+      "id": "S1",
+      "title": "Create the module/folder structure + npm project",
+      "layer": "scaffold",
+      "deps": [],
+      "acs": [],
+      "dod": "npm init -y equivalent package.json exists with esbuild + eslint devDependencies; src/logic/, src/ui/, test/logic/, scripts/ folders exist with placeholder entry files; project installs cleanly",
+      "files_hint": ["package.json", "src/logic/", "src/ui/", "src/main.js", "src/styles.css", "scripts/"]
+    },
+    {
+      "id": "S2",
+      "title": "Wire the test harness + a smoke test",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "`npm test` runs node:test against test/logic/ and a trivial smoke test passes (e.g. a placeholder pure function returns the expected value)",
+      "files_hint": ["test/logic/smoke.test.js", "package.json"]
+    },
+    {
+      "id": "S3",
+      "title": "Set up the esbuild-based single-file build",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "`npm run build` bundles src/ and produces a single root index.html with inlined JS/CSS; opening index.html in a browser shows a placeholder page with no console errors and no external network requests",
+      "files_hint": ["scripts/build.js", "index.html", "package.json"]
+    },
+    {
+      "id": "S4",
+      "title": "Add the CI workflow (build + test + lint)",
+      "layer": "scaffold",
+      "deps": ["S2", "S3"],
+      "acs": [],
+      "dod": "CI config is valid; it runs `npm run build`, `npm test`, `npm run lint` in that order and all three succeed on the scaffolded skeleton",
+      "files_hint": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "S5",
+      "title": "Write CLAUDE.md from the chosen conventions",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "CLAUDE.md documents the stack (vanilla JS, no framework), the src/logic vs src/ui split, the build-then-commit-index.html workflow, localStorage-only persistence, and the test/lint commands — matches docs/architecture-map.md",
+      "files_hint": ["CLAUDE.md"]
+    }
+  ]
+}
