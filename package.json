@@ -1,0 +1,17 @@
+{
+  "name": "pomodoro",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A polished, self-contained Pomodoro timer (single index.html, no framework, no backend).",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.13.0"
+  }
+}
