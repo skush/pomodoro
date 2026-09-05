@@ -13,7 +13,7 @@ feature_size: "XS"
 
 ## 1. Context
 
-There's no engine yet behind the pomodoro-timer idea: right now the repo has a scaffolded skeleton with a placeholder UI and no actual timer logic. This step builds the part everything else depends on — a User who wants to run a focused work session needs a timer that reliably follows the classic Pomodoro cadence (25 min focus, 5 min short break, 15 min long break every 4th focus session) using only Start/Pause/Reset, and that stays correct even if they switch away from the tab mid-session.
+There's no engine yet behind the pomodoro-timer idea: right now the repo has a scaffolded skeleton with a placeholder UI and no actual timer logic. This step builds the part everything else depends on — a User who wants to run a focused work session needs a timer that reliably follows the classic Pomodoro cadence (25 min focus, 5 min short break, 15 min long break every 4th focus session) using only Start/Pause/Reset, and that stays correct even if they switch away from the tab or the machine itself sleeps mid-session.
 
 There's no external trigger beyond the roadmap itself: this is the first unblocked step after the greenfield scaffold, and every later step (session tracking, adjustable durations, sensory feedback) depends on this engine existing first.
 
@@ -28,7 +28,7 @@ The committed approach: a pure, framework-free state machine (`src/logic/`) driv
 ## 3. Non-goals
 
 - **Visual progress ring, tab-title countdown mirror, and completion chime** — deferred to the later "Sensory feedback" roadmap step; this step ships a plain text/numeric display only, to keep this increment small and walkable.
-- **Persisting a daily completed-session counter across page reloads** — deferred to "Session tracking"; this step counts completed focus sessions only in memory, for the current page load, purely to decide short-break vs. long-break.
+- **Persisting a daily completed-session counter across page reloads** — deferred to "Session tracking"; this step only tracks the ephemeral *in-cycle focus count* in memory, for the current page load, purely to decide short-break vs. long-break (see `CONTEXT.md`).
 - **Adjustable focus/break durations** — deferred to "Adjustable durations"; this step uses the fixed classic values (25/5/15) as constants, avoiding coupling to the still-open question of mid-session duration-change behavior (`docs/roadmap.md` D1).
 - **Task-label input** — deferred to "Session tracking"; unrelated to the timer engine itself.
 
@@ -50,7 +50,7 @@ The committed approach: a pure, framework-free state machine (`src/logic/`) driv
 
 **As a** User
 **I want** to reset the current phase back to its full duration
-**So that** I can start that phase over without disturbing the rest of the cycle or my session count
+**So that** I can start that phase over without disturbing the rest of the cycle or my in-cycle focus count
 
 ### US-04: See which phase is active
 
@@ -78,6 +78,18 @@ The committed approach: a pure, framework-free state machine (`src/logic/`) driv
 **When** the User starts the timer
 **Then** the system begins counting the phase down from its full duration and shows the User that it is running, displaying the current phase's label and its remaining time
 
+### AC-01b (US-01) — error (concurrent edge)
+
+**Given** the timer is already running
+**When** the User presses Start again
+**Then** the system takes no action — the running phase continues uninterrupted from wherever it currently is, with no reset and no double-counted elapsed time
+
+### AC-08 (US-01, US-04) — domain invariant
+
+**Given** the app has just been opened (a fresh page load, no prior interaction)
+**When** the User first sees it
+**Then** the system shows the Focus phase at its full duration, not running, with the in-cycle focus count at zero — this is the only valid starting state
+
 ### AC-02 (US-02) — error
 
 **Given** the timer is not currently running
@@ -90,11 +102,17 @@ The committed approach: a pure, framework-free state machine (`src/logic/`) driv
 **When** a pause action is nonetheless requested (e.g. bypassing the disabled control)
 **Then** the underlying engine takes no action — the timer remains not-running with no change to elapsed time or phase
 
+### AC-02c (US-02) — happy path
+
+**Given** a phase is paused with some remaining time (it had not yet reached zero when paused)
+**When** the User presses Start
+**Then** the system resumes counting that phase down from exactly the remaining time it had when paused — never restarting it at full duration
+
 ### AC-03 (US-01, US-02, US-03) — authorization
 
 **Given** a User's pomodoro page instance is running
-**When** an input arrives that did not come from that page's own Start/Pause/Reset controls (e.g. a message from another tab/origin, or any input not wired to a control)
-**Then** the system ignores it — the timer's state changes only in direct response to that page's own control presses, never from any other source
+**When** an input arrives that did not come from that page's own Start/Pause/Reset controls being activated (by click or by native keyboard activation of a focused control, e.g. Space/Enter — both count as that control's own input) — for example a message from another tab/origin, or any input not wired to a control
+**Then** the engine enforces an explicit guard that ignores it — the timer's state changes only in direct response to that page's own three controls, never from any other source; this is a built, testable behavior, not merely an assumption about browser isolation
 
 ### AC-04 (US-05) — domain invariant
 
@@ -104,15 +122,15 @@ The committed approach: a pure, framework-free state machine (`src/logic/`) driv
 
 ### AC-05 (US-06) — cross-context
 
-**Given** a focus or break phase is running and the User backgrounds or minimizes the browser tab for longer than the time remaining in that phase
+**Given** a focus or break phase is running and the User backgrounds, minimizes, or the machine itself sleeps for any length of real time
 **When** the User returns to the tab
-**Then** the system has already switched the displayed phase to the correct next one per the classic cadence and is waiting for the User to press Start — reflecting the true wall-clock time that passed, not merely the update ticks that fired while the tab was backgrounded
+**Then** the system reflects at most one completed phase boundary: if the true elapsed wall-clock time was enough to finish the running phase, the system now shows the correct next phase per the classic cadence at that next phase's full duration, waiting for the User to press Start — any additional elapsed time beyond that single completed phase is discarded and never triggers a second, unattended transition, even if far more real time actually passed
 
 ### AC-06 (US-03) — happy path
 
-**Given** a phase is running with some time already elapsed
+**Given** a phase in any state — running with elapsed time, paused with elapsed time, or already at its full duration
 **When** the User resets it
-**Then** the system returns that phase to its full duration and stops it, while leaving the current phase type, the cycle position, and the in-memory completed-focus-session count unchanged
+**Then** the system returns that phase to its full duration and stops it, while leaving the current phase type, the cycle position, and the in-cycle focus count unchanged
 
 ### AC-07 (US-04, US-05) — domain invariant
 
@@ -124,27 +142,28 @@ The committed approach: a pure, framework-free state machine (`src/logic/`) driv
 
 | Aspect | Target | Measurement |
 |---|---|---|
-| Countdown drift after backgrounding | ≤ 1s versus true wall-clock elapsed time | manual check: background the tab for 5 min mid-phase, compare displayed remaining time to a stopwatch on return |
+| Countdown drift after backgrounding or sleep | ≤ 1s versus true wall-clock elapsed time | manual check: background the tab (and separately, suspend the machine) for 5 min mid-phase, compare displayed remaining time to a stopwatch on return |
 | Countdown display update rate | ≥ 1 update per second while a phase is running and the tab is foreground/visible | manual/visual check during a running phase |
-| Time to interactive | ≤ 500ms from `index.html` load to Start being clickable | manual load check in a modern browser |
+| Displayed time rounding | remaining time always shown rounded up to the next whole second (ceiling) — full duration shown immediately, never skips to one second less | unit test on the time-formatting function |
+| Self-contained load | zero network requests beyond the initial `index.html` load | manual check via the browser devtools Network tab |
 | Concurrency / state safety | at most one phase is ever "running" at a time; no double-counted elapsed time | enforced by unit tests on the state machine |
 
 ## 6.1 Security / privacy
 
 - **Data classification:** internal — the only data is ephemeral in-memory timer state for the current page load; nothing is persisted or transmitted by this step.
 - **Personal data touched:** none.
-- **AuthZ/AuthN impact:** none — there are no accounts or roles; the only access boundary is the browser's own page/tab isolation (see AC-03), which the app relies on rather than implements.
+- **AuthZ/AuthN impact:** none — there are no accounts or roles; the only access boundary is that the engine only accepts input from its own three exposed controls, enforced by an explicit guard (see AC-03).
 - **Abuse cases:**
-  - cross-tab/cross-origin control of the timer: denied by the browser's execution-context isolation (AC-03) — no app-level handling needed beyond relying on this platform guarantee.
+  - cross-tab/cross-origin control of the timer: denied by the AC-03 engine guard, reinforced by the browser's own execution-context isolation.
   - a User editing the fixed duration constants via their own browser devtools: accepted — it's their own local copy of the page, not an action against another party.
-  - rapid/spam pressing of Start/Pause/Reset: the state machine treats redundant presses (e.g. Start while already running) as no-ops — no rate limit needed since no shared resource is at risk.
+  - rapid/spam pressing of Start/Pause/Reset: the state machine treats redundant presses (e.g. Start while already running, AC-01b; Pause while not running, AC-02b) as no-ops — no rate limit needed since no shared resource is at risk.
 - **Security review:** N/A — no backend, no accounts, no persisted or transmitted personal data; a static client-side page the User runs themselves.
 
 ## 7. Metrics / KPIs
 
 - **Countdown accuracy after backgrounding** — baseline: unverified (0), target: ≤1s drift confirmed via the manual NFR check, before this step is marked done.
 - **Cycle correctness** — baseline: unverified (0), target: a full 4-focus + 1-long-break cycle completes with zero mis-ordered phase transitions, verified by unit tests on the state machine before this step is marked done.
-- **Control correctness** — baseline: unverified (0), target: 100% of invalid control presses (e.g. Pause while stopped) are no-ops with no state corruption, verified by unit tests before this step is marked done.
+- **Control correctness** — baseline: unverified (0), target: 100% of invalid/redundant control presses (e.g. Pause while stopped, Start while running) are no-ops with no state corruption, verified by unit tests before this step is marked done.
 
 ## 8. Open questions
 
