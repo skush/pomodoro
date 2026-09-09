@@ -1,11 +1,83 @@
 :root {
   --bg: #121212;
   --fg: #eaeaea;
+  --muted: #9a9a9a;
+  --accent: #eaeaea;
+  --control-bg: #1e1e1e;
+  --control-border: #333;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg);
   color: var(--fg);
   font-family: system-ui, sans-serif;
+}
+
+#app {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.timer-card {
+  width: 100%;
+  max-width: 20rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.timer-phase {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.timer-countdown {
+  margin: 0;
+  font-size: 4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.timer-controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.timer-controls button {
+  padding: 0.6rem 1.25rem;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--fg);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.timer-controls button:hover:not(:disabled) {
+  border-color: var(--fg);
+}
+
+.timer-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

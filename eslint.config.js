@@ -10,6 +10,7 @@ export default [
       globals: {
         document: 'readonly',
         window: 'readonly',
+        setInterval: 'readonly',
       },
     },
   },
