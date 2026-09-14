@@ -1,0 +1,338 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root {
+      --bg: #121212;
+      --fg: #eaeaea;
+      --accent-dim: oklch(50% 0.05 150);
+      --line: rgba(234, 234, 234, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: var(--accent-dim); }
+    a:hover { color: var(--fg); }
+
+    .root {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .scanlines {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0) 0px,
+        rgba(0, 0, 0, 0) 1px,
+        rgba(0, 0, 0, 0.35) 2px,
+        rgba(0, 0, 0, 0) 3px
+      );
+      opacity: 0.55;
+      z-index: 2;
+    }
+
+    .vignette {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+      z-index: 3;
+    }
+
+    .panel {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+
+    .kicker {
+      align-self: flex-start;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      color: var(--accent-dim);
+      margin-bottom: 40px;
+    }
+
+    .cursor {
+      animation: blink 1.1s steps(1) infinite;
+    }
+
+    @keyframes blink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+
+    .pips {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .pip {
+      width: 9px;
+      height: 9px;
+      border: 1px solid var(--accent-dim);
+      background: transparent;
+    }
+
+    .pip.filled {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+    }
+
+    .phase {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      color: var(--accent);
+      text-shadow: 0 0 10px color-mix(in oklab, var(--accent) 55%, transparent);
+      margin-bottom: 6px;
+    }
+
+    .time {
+      font-size: clamp(64px, 15vw, 132px);
+      line-height: 1;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+      color: var(--accent);
+      text-shadow:
+        0 0 10px color-mix(in oklab, var(--accent) 65%, transparent),
+        0 0 34px color-mix(in oklab, var(--accent) 35%, transparent);
+      margin-bottom: 10px;
+      animation: breathe 4.5s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.08); }
+    }
+
+    .status {
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      color: rgba(234, 234, 234, 0.45);
+      margin-bottom: 36px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .btn {
+      font-family: inherit;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent-dim);
+      border-radius: 2px;
+      padding: 12px 20px;
+      min-height: 44px;
+      cursor: pointer;
+      transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: color-mix(in oklab, var(--accent) 14%, transparent);
+      border-color: var(--accent);
+      box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 45%, transparent);
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .btn:disabled {
+      color: var(--accent-dim);
+      border-color: var(--line);
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-reset {
+      color: var(--fg);
+      border-color: var(--line);
+    }
+
+    .btn-reset:hover {
+      border-color: rgba(234, 234, 234, 0.5);
+      box-shadow: none;
+      background: rgba(234, 234, 234, 0.08);
+    }
+  </style>
+</helmet>
+<div class="root" style="--accent: {{accent}}">
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+  <main class="panel">
+    <div class="kicker">&gt; pomodoro<span class="cursor">_</span></div>
+
+    <div class="pips" role="img" aria-label="Focus sessions completed this cycle">
+      <sc-for list="{{pips}}" as="p" hint-placeholder-count="4">
+        <span class="pip {{p.filledClass}}"></span>
+      </sc-for>
+    </div>
+
+    <div class="phase" aria-live="polite">{{phaseLabel}}</div>
+
+    <div class="time" aria-live="polite">{{time}}</div>
+
+    <div class="status">{{status}}</div>
+
+    <div class="controls">
+      <button type="button" class="btn" onClick="{{onStart}}" disabled="{{startDisabled}}">[ START ]</button>
+      <button type="button" class="btn" onClick="{{onPause}}" disabled="{{pauseDisabled}}">[ PAUSE ]</button>
+      <button type="button" class="btn btn-reset" onClick="{{onReset}}">[ RESET ]</button>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#33ff99","options":["#33ff99","#ffb000","#00e5ff","#ff5c5c"]}}'>
+var DURATIONS = { FOCUS: 25 * 60, SHORT_BREAK: 5 * 60, LONG_BREAK: 15 * 60 };
+var PHASE_LABEL = { FOCUS: "FOCUS", SHORT_BREAK: "SHORT BREAK", LONG_BREAK: "LONG BREAK" };
+var TICK_MS = 150;
+var TICK_STEP = 15;
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      phase: "FOCUS",
+      remaining: DURATIONS.FOCUS,
+      running: false,
+      cycleCount: 0,
+    };
+    this.intervalId = null;
+  }
+
+  componentWillUnmount() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+    }
+  }
+
+  tick = () => {
+    var remaining = this.state.remaining - TICK_STEP;
+    if (remaining > 0) {
+      this.setState({ remaining: remaining });
+      return;
+    }
+
+    clearInterval(this.intervalId);
+    this.intervalId = null;
+
+    var phase = this.state.phase;
+    var cycleCount = this.state.cycleCount;
+    var nextPhase;
+    var nextCycleCount;
+
+    if (phase === "FOCUS") {
+      var completed = cycleCount + 1;
+      if (completed >= 4) {
+        nextPhase = "LONG_BREAK";
+        nextCycleCount = 4;
+      } else {
+        nextPhase = "SHORT_BREAK";
+        nextCycleCount = completed;
+      }
+    } else if (phase === "SHORT_BREAK") {
+      nextPhase = "FOCUS";
+      nextCycleCount = cycleCount;
+    } else {
+      nextPhase = "FOCUS";
+      nextCycleCount = 0;
+    }
+
+    this.setState({
+      phase: nextPhase,
+      remaining: DURATIONS[nextPhase],
+      running: false,
+      cycleCount: nextCycleCount,
+    });
+  };
+
+  start = () => {
+    if (this.state.running) {
+      return;
+    }
+    this.setState({ running: true });
+    this.intervalId = setInterval(this.tick, TICK_MS);
+  };
+
+  pause = () => {
+    if (!this.state.running) {
+      return;
+    }
+    clearInterval(this.intervalId);
+    this.intervalId = null;
+    this.setState({ running: false });
+  };
+
+  reset = () => {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.setState({ running: false, remaining: DURATIONS[this.state.phase] });
+  };
+
+  renderVals() {
+    var phase = this.state.phase;
+    var remaining = Math.max(0, Math.ceil(this.state.remaining));
+    var running = this.state.running;
+    var cycleCount = this.state.cycleCount;
+    var total = DURATIONS[phase];
+    var isReady = !running && remaining === total;
+    var status = running ? "RUNNING" : (isReady ? "READY" : "PAUSED");
+    var mm = Math.floor(remaining / 60).toString().padStart(2, "0");
+    var ss = (remaining % 60).toString().padStart(2, "0");
+    var pips = [0, 1, 2, 3].map(function (i) {
+      return { filledClass: i < cycleCount ? "filled" : "" };
+    });
+
+    return {
+      accent: this.props.accent ?? "#33ff99",
+      phaseLabel: PHASE_LABEL[phase],
+      status: status,
+      time: mm + ":" + ss,
+      pips: pips,
+      startDisabled: running,
+      pauseDisabled: !running,
+      onStart: this.start,
+      onPause: this.pause,
+      onReset: this.reset,
+    };
+  }
+}
+</script>
+</body>
+</html>

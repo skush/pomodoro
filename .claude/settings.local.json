@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(cd \"C:\\\\Users\\\\uakyi\\\\Dev\\\\Agentic-seminar\\\\pomodoro\" && cp \"C:\\\\Users\\\\uakyi\\\\.claude\\\\plugins\\\\cache\\\\sdd\\\\sdd\\\\2.3.0\\\\skills\\\\design\\\\templates\\\\sad.md\" docs/features/core-timer/sad.md && echo copied)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  },
   "enabledPlugins": {
     "sdd@sdd": true
   }

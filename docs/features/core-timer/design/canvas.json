@@ -1,0 +1,15 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 900, "h": 620, "is_interactive": true }
+  ],
+  "annotations": [
+    {
+      "id": "demo-notes",
+      "x": 960,
+      "y": 0,
+      "w": 260,
+      "text": "Demo notes\n\n- Countdown runs ~100x real speed (a 25:00 focus phase finishes in ~15s) so you can click through a full cycle. Displayed values (25:00 / 5:00 / 15:00) are the real spec durations.\n- Session pips = completed focus sessions this cycle (0-4); the 4th always routes to Long break per AC-04.\n- No color-coding by phase, no progress ring, no chime, per spec.md non-goals / open question default - one accent color, plain text labels only.\n- Wall-clock reconciliation after backgrounding (US-06/AC-05) is engine logic, not modeled visually here."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}
