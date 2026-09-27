@@ -2,7 +2,7 @@
 status: Draft
 owner: "sergii.kushnir@gmail.com"
 reviewers: ["Tech Lead"]
-updated_at: "2026-09-27"
+updated_at: "2026-09-28"
 feature_size: "XS"
 ---
 
@@ -160,5 +160,5 @@ The committed approach: a task-label text input, committed to this browser's loc
 
 ## 8. Open questions
 
-- [ ] Should the task label clear automatically once a Long break begins (mirroring the in-cycle focus count's reset), or does it persist indefinitely until the User changes it? Default now: persists indefinitely — a task can reasonably span multiple cycles. — owner: PM (sergii.kushnir@gmail.com), due: before `design`
-- [ ] Exact wording of the task-label's placeholder hint and the 100-character rejection message? Default now: implementer's choice at `design`/`screens` time, kept short and plain-language. — owner: Tech Lead, due: before `screens`/`design`
+- [x] ~~Should the task label clear automatically once a Long break begins...~~ **Resolved during `design` (2026-09-28):** the task label persists indefinitely until the User changes it — a task can reasonably span multiple cycles. No auto-clear trigger exists; see `sad.md` §4.
+- [x] ~~Exact wording of the task-label's placeholder hint and the 100-character rejection message?~~ **Resolved during `design` (2026-09-28):** placeholder hint = "What are you focusing on?"; the limit message = "Task label is limited to 100 characters." See `sad.md` §5.
