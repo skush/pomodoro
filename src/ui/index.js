@@ -10,6 +10,8 @@ import {
   validateStoredDate,
   validateStoredLabel,
   validateLabelInput,
+  localDateString,
+  shouldRollover,
 } from '../logic/index.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
@@ -92,14 +94,28 @@ export function mount(root, engine) {
   labelLimitMessage.textContent = LABEL_LIMIT_MESSAGE;
   labelLimitMessage.hidden = true;
 
+  const sessionCount = document.createElement('p');
+  sessionCount.className = 'session-count';
+
   controls.append(startBtn, pauseBtn, resetBtn);
-  card.append(label, countdown, controls, labelField, labelLimitMessage);
+  card.append(label, countdown, controls, labelField, labelLimitMessage, sessionCount);
   root.append(card);
 
   const storage = window.localStorage;
   const persisted = readPersistedState(storage);
   labelField.value = persisted.label;
   let lastAcceptedLabel = persisted.label;
+
+  // session-tracking T6 (spec.md AC-04/AC-04b/AC-05/AC-06/AC-06b, sad.md §6 Flow 1):
+  // in-memory tracked day + count, seeded from storage and kept in sync with it
+  // on every rollover/credit write.
+  let trackedDate = persisted.date;
+  let count = persisted.count;
+
+  function sessionCountText(n) {
+    return `Today's completed sessions: ${n}`;
+  }
+  sessionCount.textContent = sessionCountText(count);
 
   // session-tracking T5 (spec.md AC-01/AC-01b/AC-02): live typing, no storage
   // write on every keystroke — commit happens only on blur/Enter below. A
@@ -126,8 +142,31 @@ export function mount(root, engine) {
     }
   });
 
+  // session-tracking T6 (sad.md §6 «Focus completion → true-day credit» /
+  // «Page load — restore label and display today's count»): runs on every read
+  // (load, interval tick, visibilitychange). Step 1 rolls the tracked day
+  // forward using the real current date only, never the completing session's
+  // own day (AC-06/AC-06b). Step 2 credits this specific completion only if its
+  // true day matches the (possibly just-rolled) tracked day (AC-04) — a session
+  // that truly finished before midnight is not credited into the new day
+  // (AC-06). Reset/Short/Long-break completions never reach this at all:
+  // `justCompletedFocusAt` is null for those transitions (AC-05).
+  function updateSessionCount(now, justCompletedFocusAt) {
+    if (shouldRollover(trackedDate, now)) {
+      trackedDate = localDateString(now);
+      count = 0;
+      persistState(storage, { count, date: trackedDate });
+    }
+    if (justCompletedFocusAt !== null && localDateString(justCompletedFocusAt) === trackedDate) {
+      count += 1;
+      persistState(storage, { count });
+    }
+    sessionCount.textContent = sessionCountText(count);
+  }
+
   function render() {
-    const snapshot = engine.getSnapshot(Date.now());
+    const now = Date.now();
+    const snapshot = engine.getSnapshot(now);
     const phaseText = PHASE_LABELS[snapshot.phase] ?? snapshot.phase;
     if (label.textContent !== phaseText) label.textContent = phaseText;
     const countdownText = formatDuration(snapshot.remainingMs);
@@ -135,6 +174,7 @@ export function mount(root, engine) {
     const { startDisabled, pauseDisabled } = controlStates(snapshot);
     startBtn.disabled = startDisabled;
     pauseBtn.disabled = pauseDisabled;
+    updateSessionCount(now, snapshot.justCompletedFocusAt);
   }
 
   // Moves focus to the control that just became enabled when the one the
