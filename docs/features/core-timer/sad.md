@@ -308,7 +308,7 @@ ADR files live under `docs/features/core-timer/adr/NNNN-<title>.md`.
 
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
-| The ≤1s drift NFR (QG-1) is verified only manually (stopwatch), no automated backgrounding/sleep test | Medium | Documented manual-check procedure in spec §6; a scripted fake-timer test could be added in a later hardening pass, not required for this step | Tech Lead |
+| ~~The ≤1s drift NFR (QG-1) is verified only manually (stopwatch), no automated backgrounding/sleep test~~ — closed by the `test/logic/timer-engine.test.js` "drift-free countdown" suite (task T6, `docs/features/core-timer/tasks/t6-drift-hardening-test.md`) | Low | Automated deterministic assertions cover jittery-poll and long-backgrounding-gap cases; the manual stopwatch check in spec §6 remains as a real-hardware sanity check, no longer the only verification | Tech Lead |
 | A User can edit the fixed 25/5/15 duration constants via their own browser devtools | Low | Accepted per spec §6.1 abuse cases — it's the User's own local copy of the page, not an action against another party | N/A (accepted) |
 
 **Accepted debt (acceptable in v1, plan to fix later):**
