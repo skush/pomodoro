@@ -324,3 +324,63 @@ describe('formatDuration — display rounding (NFR)', () => {
     assert.equal(formatDuration(-500), '0:00');
   });
 });
+
+// session-tracking T1 (ADR-0001, AC-04/AC-06): getSnapshot() must report the exact
+// wall-clock moment a Focus phase's deadline passed, latched inside settle() itself
+// so the signal survives regardless of which public method triggers the transition.
+describe('justCompletedFocusAt (session-tracking T1, ADR-0001)', () => {
+  test('is null when no completion has occurred', () => {
+    const engine = createTimerEngine();
+    const snap = engine.getSnapshot(0);
+    assert.equal(snap.justCompletedFocusAt, null);
+  });
+
+  test('reports the true deadline when a Focus phase completes during a getSnapshot poll', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    const snap = engine.getSnapshot(FOCUS + 5000); // polled 5s after the true deadline
+    assert.equal(snap.justCompletedFocusAt, FOCUS); // the true deadline, not the poll time
+  });
+
+  test('is consumed exactly once — null on the next call', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(FOCUS + 1);
+    const second = engine.getSnapshot(FOCUS + 2);
+    assert.equal(second.justCompletedFocusAt, null);
+  });
+
+  test('is latched when the completing settle() runs inside start(), not only getSnapshot()', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    // Focus phase's deadline passes; the User clicks Start again before any getSnapshot poll.
+    engine.start(FOCUS + 3000);
+    const snap = engine.getSnapshot(FOCUS + 4000);
+    assert.equal(snap.justCompletedFocusAt, FOCUS);
+  });
+
+  test('is latched when the completing settle() runs inside pause()', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.pause(FOCUS + 3000);
+    const snap = engine.getSnapshot(FOCUS + 4000);
+    assert.equal(snap.justCompletedFocusAt, FOCUS);
+  });
+
+  test('is latched when the completing settle() runs inside reset()', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.reset(FOCUS + 3000);
+    const snap = engine.getSnapshot(FOCUS + 4000);
+    assert.equal(snap.justCompletedFocusAt, FOCUS);
+  });
+
+  test('stays null across a Short/Long break completion (only Focus completions latch)', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(FOCUS + 1); // Focus completes -> Short break; latch set then consumed
+    engine.start(FOCUS + 1);
+    const afterBreak = engine.getSnapshot(FOCUS + 1 + SHORT + 1); // Short break completes
+    assert.equal(afterBreak.justCompletedFocusAt, null);
+  });
+});

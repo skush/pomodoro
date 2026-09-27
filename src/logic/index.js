@@ -45,6 +45,11 @@ export function createTimerEngine() {
   let deadlineAt = null;
   let remainingMs = durationFor(phase);
   let focusCount = 0;
+  // session-tracking ADR-0001: the true wall-clock moment a Focus phase's deadline
+  // passed, latched here (not in getSnapshot) so it survives regardless of which
+  // public method's settle() call detects the transition. getSnapshot() consumes
+  // and clears it exactly once.
+  let justCompletedFocusAt = null;
 
   // Advances at most one phase boundary if the running phase's deadline has
   // passed. Any further elapsed time beyond that single boundary is discarded
@@ -54,6 +59,7 @@ export function createTimerEngine() {
 
     if (phase === PHASES.FOCUS) {
       focusCount += 1;
+      justCompletedFocusAt = deadlineAt;
     }
     phase =
       phase === PHASES.FOCUS
@@ -95,11 +101,14 @@ export function createTimerEngine() {
   function getSnapshot(now) {
     settle(now);
     const remaining = running ? clampRemaining(phase, deadlineAt - now) : remainingMs;
+    const consumedCompletion = justCompletedFocusAt;
+    justCompletedFocusAt = null;
     return Object.freeze({
       phase,
       running,
       remainingMs: remaining,
       focusCount,
+      justCompletedFocusAt: consumedCompletion,
     });
   }
 
