@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  createTimerEngine,
   localDateString,
   shouldRollover,
   validateLabelInput,
@@ -8,6 +9,8 @@ import {
   validateStoredDate,
   validateStoredLabel,
 } from '../../src/logic/index.js';
+
+const FOCUS_MS = 25 * 60 * 1000;
 
 // All timestamps use the local Date(y, m, d, h, min, s) constructor, never
 // Date.UTC — shouldRollover/localDateString reason about the *local* calendar
@@ -152,5 +155,49 @@ describe('validateStoredLabel (session-tracking T3, §6 NFR "Corrupted or missin
     assert.equal(validateStoredLabel(undefined), '');
     assert.equal(validateStoredLabel(42), '');
     assert.equal(validateStoredLabel({}), '');
+  });
+});
+
+// session-tracking T7 (sad.md §11 risk, spec.md AC-06): the sleep-across-midnight
+// case end-to-end — composes T1's engine latch with T2's rollover decision
+// exactly as src/ui/index.js's updateSessionCount() does, without needing a DOM.
+describe('sleep-across-midnight, end-to-end (session-tracking T7, AC-06)', () => {
+  test('a session that truly finished before midnight is not credited into the new day', () => {
+    const engine = createTimerEngine();
+    const start = new Date(2026, 8, 28, 23, 10, 0).getTime(); // starts 23:10, before midnight
+    engine.start(start);
+    const trueDeadline = start + FOCUS_MS; // 23:35 — still before midnight
+
+    const readAt = new Date(2026, 8, 29, 0, 10, 0).getTime(); // detected 00:10 next day
+    const snap = engine.getSnapshot(readAt);
+    assert.equal(snap.justCompletedFocusAt, trueDeadline);
+
+    // The same two-step decision src/ui/index.js's updateSessionCount() performs:
+    let trackedDate = localDateString(start); // stored date is "yesterday"
+    if (shouldRollover(trackedDate, readAt)) {
+      trackedDate = localDateString(readAt); // Step 1: rolls forward using NOW
+    }
+    const credited = snap.justCompletedFocusAt !== null && localDateString(snap.justCompletedFocusAt) === trackedDate;
+
+    assert.equal(trackedDate, localDateString(readAt)); // rolled to the new day
+    assert.equal(credited, false); // Step 2: NOT credited — the true completion was on the old day
+  });
+
+  test('a session that truly finishes after midnight IS credited to the new day', () => {
+    const engine = createTimerEngine();
+    const start = new Date(2026, 8, 28, 23, 50, 0).getTime(); // starts 23:50
+    engine.start(start);
+    const trueDeadline = start + FOCUS_MS; // 00:15 next day — after midnight
+
+    const readAt = trueDeadline + 60_000; // detected a minute later
+    const snap = engine.getSnapshot(readAt);
+
+    let trackedDate = localDateString(start);
+    if (shouldRollover(trackedDate, readAt)) {
+      trackedDate = localDateString(readAt);
+    }
+    const credited = snap.justCompletedFocusAt !== null && localDateString(snap.justCompletedFocusAt) === trackedDate;
+
+    assert.equal(credited, true);
   });
 });
