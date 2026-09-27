@@ -1,0 +1,75 @@
+{
+  "slug": "session-tracking",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Latch the true Focus-completion timestamp inside the engine's settle()",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-04", "AC-06"],
+      "dod": "Unit tests assert justCompletedFocusAt is reported exactly once on the next getSnapshot() call after a transition triggered via start, pause, reset, or getSnapshot itself, and null otherwise.",
+      "files_hint": ["src/logic/index.js", "test/logic/timer-engine.test.js"],
+      "file": "docs/features/session-tracking/tasks/engine-focus-completion-latch.md"
+    },
+    {
+      "id": "T2",
+      "title": "Add a pure daily-rollover decision function",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-06", "AC-06b"],
+      "dod": "Unit test using a fixed/mocked date boundary passes across all >=5 required midnight-boundary cases (exactly-at-midnight, mid-sleep crossing, long-absence crossing, true-completion-before-midnight crossing, backward clock change).",
+      "files_hint": ["src/logic/index.js", "test/logic/session-tracking.test.js"],
+      "file": "docs/features/session-tracking/tasks/rollover-decision-function.md"
+    },
+    {
+      "id": "T3",
+      "title": "Add pure task-label length validation and per-field storage fallback functions",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-02"],
+      "dod": "Unit tests pass for the 100-character hard stop (typed and pasted input) and for count/date/label fallback on missing key, malformed JSON, and wrong type, with 0 thrown exceptions.",
+      "files_hint": ["src/logic/index.js", "test/logic/session-tracking.test.js"],
+      "file": "docs/features/session-tracking/tasks/field-validation-fallback.md"
+    },
+    {
+      "id": "T4",
+      "title": "Build the centralized local-storage read + write gatekeeper",
+      "layer": "infra",
+      "deps": ["T2", "T3"],
+      "acs": ["AC-07"],
+      "dod": "Source-scan test confirms exactly one function in src/ui/index.js calls the storage-write API, and a unit test simulating a write failure asserts 0 exceptions thrown and no error shown to the User.",
+      "files_hint": ["src/ui/index.js", "test/logic/write-guard.test.js"],
+      "file": "docs/features/session-tracking/tasks/centralized-write-gatekeeper.md"
+    },
+    {
+      "id": "T5",
+      "title": "Wire the task-label input: typing, placeholder, 100-char limit, commit-on-blur/Enter",
+      "layer": "ui",
+      "deps": ["T3", "T4"],
+      "acs": ["AC-01", "AC-01b", "AC-02", "AC-03"],
+      "dod": "Manual check: typed text displays live, placeholder toggles correctly, the 100-char hard stop holds for both typed and pasted input, and reload restores the last-committed value.",
+      "files_hint": ["src/ui/index.js", "src/styles.css", "index.html"],
+      "file": "docs/features/session-tracking/tasks/task-label-ui.md"
+    },
+    {
+      "id": "T6",
+      "title": "Wire today's count display: load-time rollover check + Focus-completion crediting",
+      "layer": "ui",
+      "deps": ["T1", "T2", "T4"],
+      "acs": ["AC-04", "AC-04b", "AC-05", "AC-06", "AC-06b"],
+      "dod": "Unit test using a fixed/mocked date boundary passes end-to-end through this wiring across all >=5 required midnight-boundary cases, and a manual check confirms the count increments only on a genuine same-tracked-day Focus completion, never on Reset or a break completing.",
+      "files_hint": ["src/ui/index.js", "src/styles.css", "index.html"],
+      "file": "docs/features/session-tracking/tasks/daily-count-ui.md"
+    },
+    {
+      "id": "T7",
+      "title": "Dedicated edge-case coverage: transition-source latch, write-integrity KPI",
+      "layer": "tests",
+      "deps": ["T1", "T2", "T3", "T4", "T5", "T6"],
+      "acs": ["AC-06", "AC-07"],
+      "dod": "npm test passes in full, with the three start/pause/reset-triggered latch cases, the sleep-across-midnight end-to-end case, and the AC-07 source-scan test all present and green against T5/T6's final code.",
+      "files_hint": ["test/logic/timer-engine.test.js", "test/logic/session-tracking.test.js", "test/logic/write-guard.test.js"],
+      "file": "docs/features/session-tracking/tasks/edge-case-test-hardening.md"
+    }
+  ]
+}
