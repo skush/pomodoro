@@ -2,7 +2,45 @@
 // The only caller of the logic engine's methods (AC-03) — no other input source
 // (no window 'message' listener, nothing else) is ever wired to it.
 
-import { formatDuration, PHASES, controlStates } from '../logic/index.js';
+import {
+  formatDuration,
+  PHASES,
+  controlStates,
+  validateStoredCount,
+  validateStoredDate,
+  validateStoredLabel,
+} from '../logic/index.js';
+
+const COUNT_KEY = 'session-tracking:count';
+const DATE_KEY = 'session-tracking:date';
+const LABEL_KEY = 'session-tracking:label';
+
+// session-tracking T4 (ADR-0002, AC-07): the ONLY function anywhere that may call
+// `storage.setItem` for the count/date/label keys — the write guard's single
+// choke point. Always writes exactly the given patch as a plain overwrite, never
+// a read-then-merge; a thrown storage error (quota/private-mode/disabled) is
+// swallowed so the app keeps running in-memory with nothing shown to the User
+// (spec.md §6 NFR "Storage write failure"). `storage` is injected (never the
+// bare `localStorage` global read here) so this is callable from plain Node.
+export function persistState(storage, patch) {
+  try {
+    if ('count' in patch) storage.setItem(COUNT_KEY, String(patch.count));
+    if ('date' in patch) storage.setItem(DATE_KEY, patch.date);
+    if ('label' in patch) storage.setItem(LABEL_KEY, patch.label);
+  } catch {
+    // fail-soft: never throw to the User, never surface an error (spec.md §6 NFR)
+  }
+}
+
+// session-tracking T4: reads all three persisted fields, each validated through
+// its own T3 fallback independently — a corrupted field never blocks the others.
+export function readPersistedState(storage) {
+  return {
+    count: validateStoredCount(storage.getItem(COUNT_KEY)),
+    date: validateStoredDate(storage.getItem(DATE_KEY)),
+    label: validateStoredLabel(storage.getItem(LABEL_KEY)),
+  };
+}
 
 const PHASE_LABELS = {
   [PHASES.FOCUS]: 'Focus',
