@@ -161,9 +161,12 @@ rendering, control wiring) → `src/main.js` (app — the single wire-up point),
 ```
 src/
 ├── logic/         <pure state machine: phase/cycle transitions, wall-clock deadline math>
-│   └── index.js   <createTimerEngine() → { start, pause, reset, getSnapshot } — no other exports>
+│   └── index.js   <createTimerEngine() is the module's only stateful export — its
+│                    { start, pause, reset, getSnapshot } are the only way to change state.
+│                    Other exports (PHASES, controlStates, formatDuration) are frozen
+│                    constants / pure functions with no access to engine state.>
 ├── ui/            <DOM: renders phase label + countdown, wires the three controls>
-│   └── index.js   <mount(root) — the only caller of the logic factory's methods>
+│   └── index.js   <mount(root, engine) — the only caller of the logic factory's methods>
 └── main.js        <wiring: instantiates the logic engine, hands it to ui.mount>
 ```
 
@@ -187,8 +190,8 @@ C4Container
 
 The Containers view shows the whole app as one deployable boundary split into two internal modules:
 the UI layer is the only thing the User touches and the only caller of the timer engine, and the
-timer engine exposes exactly those four functions — nothing else, and nothing reaches it any other
-way (§4 point 5 / ADR-0002).
+timer engine's only stateful surface is exactly those four functions — nothing else can change its
+state, and nothing reaches it any other way (§4 point 5 / ADR-0002).
 
 ## 6. Runtime view
 
@@ -248,6 +251,67 @@ state trustworthy (§10 QG-2). Flow 2 is the architecturally distinctive one: be
 an absolute deadline (ADR-0001), reconciliation on return is a single comparison, and the "at most
 one boundary" rule (AC-05) falls out of the next phase starting idle rather than needing to be
 special-cased.
+
+**Critical flow 3: Initial mount, then foreground phase completion and cadence (AC-08, AC-04,
+AC-07, US-04, US-05)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Main as main.js
+    participant UI as UI layer
+    participant Engine as Timer engine
+
+    User->>Main: opens index.html
+    Main->>Engine: createTimerEngine()
+    Main->>UI: mount(root, engine)
+    UI->>Engine: getSnapshot(now)
+    Engine-->>UI: snapshot (Focus, full duration, not running, focusCount 0 — AC-08)
+    UI-->>User: shows Focus at full duration, Start enabled, Pause disabled
+
+    User->>UI: clicks Start
+    UI->>Engine: start(now)
+    Note over UI,Engine: recurring render tick (>=1/s) while the tab stays foreground
+    UI->>Engine: getSnapshot(now) (interval tick)
+    alt now >= deadlineAt (phase completes in the foreground)
+        Engine-->>UI: next phase per cadence, at full duration, not running (AC-07)
+        UI-->>User: shows the new phase waiting for Start — no auto-start
+        Note over Engine: if this was the 4th completed focus session, the next phase is<br/>Long break, never Short break (AC-04), and focusCount resets to 0
+    else now < deadlineAt
+        Engine-->>UI: same phase, remaining = deadlineAt - now
+        UI-->>User: countdown keeps ticking down
+    end
+```
+
+**Critical flow 4: Reset from any state (AC-06, US-03)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+
+    User->>UI: clicks Reset
+    UI->>Engine: reset(now)
+    Note over Engine: returns the current phase to full duration and stops it —<br/>phase type, cycle position and in-cycle focus count are untouched,<br/>whether the phase was running, paused, or already idle
+    Engine-->>UI: snapshot (same phase, full duration, not running)
+    UI-->>User: shows the phase reset to full duration, Start enabled, Pause disabled
+```
+
+Flow 3 covers the initial-mount invariant (AC-08) and the case Flow 2 doesn't — a phase completing
+while the tab stays in the foreground, driven by the UI's own render interval rather than a
+visibility-return — including the 4th-focus → long-break branch (AC-04) and the "never auto-starts"
+rule (AC-07) shared with Flow 2. Flow 4 covers Reset (AC-06), which — unlike Start/Pause — is
+defined to behave identically regardless of the phase's running/paused/idle state, so one flow
+suffices for all three.
+
+**AC-03's rejection path** has no sequence flow because there is nothing to sequence: the guard is
+enforced by construction, not by a runtime branch. `src/logic/`'s only stateful export is
+`createTimerEngine()`'s `{start, pause, reset, getSnapshot}`, and no code under `src/` registers a
+`window` `'message'` listener or any other global input channel (ADR-0002) — an input from outside
+this page's own three controls has no path to the engine to diagram, which is exactly the guarantee
+ADR-0002 chose structural encapsulation to provide. This is verified by a source-level test rather
+than a runtime scenario (`test/logic/timer-engine.test.js`, "engine surface (AC-03)").
 
 ## 7. Deployment view
 

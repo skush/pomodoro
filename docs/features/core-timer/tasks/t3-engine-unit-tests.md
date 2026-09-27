@@ -4,12 +4,12 @@ title: "Unit tests for the engine state machine (control no-ops, cadence, guard)
 layer: "tests"
 deps: ["T1", "T2"]
 blocks: ["T6"]
-acs: ["AC-01", "AC-01b", "AC-02b", "AC-02c", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08"]
+acs: ["AC-01", "AC-01b", "AC-02", "AC-02b", "AC-02c", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08"]
 files_hint: ["test/logic/timer-engine.test.js"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
 context_budget: "S"
-status: "todo"
+status: "done"
 ---
 
 # T3 — Unit tests for the engine state machine (control no-ops, cadence, guard)
@@ -50,18 +50,19 @@ Internal — no API surface.
 
 ## Acceptance criteria
 
-All ten of the engine-level ACs this test suite asserts are quoted in full in [T1](./t1-engine-controls.md) (AC-01, AC-01b, AC-02b, AC-02c, AC-03, AC-06, AC-08) and [T2](./t2-cadence-reconciliation.md) (AC-04, AC-05, AC-07) — this task does not re-derive behavior, it writes the assertions against theirs.
+All eleven of the engine-level ACs this test suite asserts are quoted in full in [T1](./t1-engine-controls.md) (AC-01, AC-01b, AC-02b, AC-02c, AC-03, AC-06, AC-08), [T2](./t2-cadence-reconciliation.md) (AC-04, AC-05, AC-07), and [T4](./t4-ui-rendering-controls.md) (AC-02, whose pure `controlStates` decision lives in `src/logic/` and is tested here) — this task does not re-derive behavior, it writes the assertions against theirs.
 
-— `spec.md §5, AC-01/AC-01b/AC-02b/AC-02c/AC-03/AC-04/AC-05/AC-06/AC-07/AC-08, verbatim` · full text: [spec.md](../spec.md)
+— `spec.md §5, AC-01/AC-01b/AC-02/AC-02b/AC-02c/AC-03/AC-04/AC-05/AC-06/AC-07/AC-08, verbatim` · full text: [spec.md](../spec.md)
 
 ## Checklist
 
-- [ ] `node:test` suite for `createTimerEngine()` initial state (AC-08) — `test/logic/timer-engine.test.js`
-- [ ] Tests for `start`/`pause`/`reset` happy paths and no-op guards (AC-01, AC-01b, AC-02b, AC-02c, AC-06) — `test/logic/timer-engine.test.js`
-- [ ] Tests for cadence transitions incl. the 4th-focus-to-long-break rule (AC-04, AC-07) — `test/logic/timer-engine.test.js`
-- [ ] Test for the AC-05 "at most one boundary" backgrounding scenario using a synthetic large `now` jump — `test/logic/timer-engine.test.js`
-- [ ] Test dispatching a `window` `MessageEvent` and asserting no state change, plus a note that no `message` listener is registered (AC-03) — `test/logic/timer-engine.test.js`
-- [ ] Unit test for `formatDuration` ceiling rounding (spec §6 NFR display rounding row) — `test/logic/timer-engine.test.js`
+- [x] `node:test` suite for `createTimerEngine()` initial state (AC-08) — `test/logic/timer-engine.test.js`
+- [x] Tests for `start`/`pause`/`reset` happy paths and no-op guards (AC-01, AC-01b, AC-02b, AC-02c, AC-06) — `test/logic/timer-engine.test.js`
+- [x] Tests for cadence transitions incl. the 4th-focus-to-long-break rule (AC-04, AC-07) — `test/logic/timer-engine.test.js`
+- [x] Test for the AC-05 "at most one boundary" backgrounding scenario using a synthetic large `now` jump — `test/logic/timer-engine.test.js`
+- [x] Source-level test scanning every `.js` file under `src/` for a `message` listener / `onmessage` / `postMessage` / `BroadcastChannel` and asserting none exist (AC-03) — `test/logic/timer-engine.test.js`. *(No dispatched-`MessageEvent` runtime test: the repo has no DOM/jsdom test environment, so the ADR-0002 wording was amended to describe this static check instead — see the ADR's 2026-09-27 amendment.)*
+- [x] Tests for `controlStates(snapshot)` across idle/running/paused/just-completed states (AC-02) — `test/logic/timer-engine.test.js`
+- [x] Unit test for `formatDuration` ceiling rounding (spec §6 NFR display rounding row) — `test/logic/timer-engine.test.js`
 
 ## Edge cases
 
@@ -73,6 +74,6 @@ All ten of the engine-level ACs this test suite asserts are quoted in full in [T
 
 ## Definition of Done
 
-- [ ] `npm test` passes with all listed cases green
-- [ ] every Hard Rule inlined above still holds
-- [ ] lint + vet clean
+- [x] `npm test` passes with all listed cases green
+- [x] every Hard Rule inlined above still holds
+- [x] lint + vet clean

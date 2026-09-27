@@ -9,7 +9,7 @@ files_hint: ["src/logic/index.js"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
 context_budget: "M"
-status: "todo"
+status: "done"
 ---
 
 # T2 — Implement phase cadence and backgrounding reconciliation (settle/getSnapshot)
@@ -91,10 +91,10 @@ Internal — no API surface.
 
 ## Checklist
 
-- [ ] Implement `settle(now)`: advance at most one phase boundary when `now >= deadlineAt`, else no-op — `src/logic/index.js`
-- [ ] Wire the classic cadence (Focus → Short break ×3, then Focus → Long break on the 4th) and reset `focusCount` on entering Long break — `src/logic/index.js`
-- [ ] Call `settle(now)` at the top of `start`, `pause`, `reset`, and `getSnapshot` so every entry point reconciles first (AC-05, AC-07) — `src/logic/index.js`
-- [ ] New phase after a boundary starts idle (`running: false`) at full duration, never auto-starts — `src/logic/index.js`
+- [x] Implement `settle(now)`: advance at most one phase boundary when `now >= deadlineAt`, else no-op — `src/logic/index.js`
+- [x] Wire the classic cadence (Focus → Short break ×3, then Focus → Long break on the 4th) and reset `focusCount` on entering Long break — `src/logic/index.js`
+- [x] Call `settle(now)` at the top of `start`, `pause`, `reset`, and `getSnapshot` so every entry point reconciles first (AC-05, AC-07) — `src/logic/index.js`
+- [x] New phase after a boundary starts idle (`running: false`) at full duration, never auto-starts — `src/logic/index.js`
 
 ## Edge cases
 
@@ -107,6 +107,6 @@ Internal — no API surface.
 
 ## Definition of Done
 
-- [ ] Unit tests for AC-04, AC-05, AC-07 pass, including a "long absence still only advances one boundary" case
-- [ ] every Hard Rule inlined above still holds
-- [ ] lint + vet clean
+- [x] Unit tests for AC-04, AC-05, AC-07 pass, including a "long absence still only advances one boundary" case
+- [x] every Hard Rule inlined above still holds
+- [x] lint + vet clean

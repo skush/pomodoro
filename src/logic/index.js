@@ -26,10 +26,19 @@ function durationFor(phase) {
   }
 }
 
-// createTimerEngine() -> { start, pause, reset, getSnapshot } — no other exports
-// reach mutable state (AC-03: the engine only ever changes in response to these
-// four methods, called only by src/ui/, never from a 'message' listener or any
-// other input source).
+// Clamps a deadline-minus-now reading to [0, full duration]. Without the upper
+// clamp, a backward wall-clock jump (manual change, NTP correction) while a
+// phase is running would show more than the phase's own full duration.
+function clampRemaining(phase, remainingMs) {
+  return Math.min(durationFor(phase), Math.max(0, remainingMs));
+}
+
+// createTimerEngine() -> { start, pause, reset, getSnapshot } is the module's only
+// stateful export (AC-03: the engine only ever changes in response to these four
+// methods, called only by src/ui/, never from a 'message' listener or any other
+// input source). Other exports (PHASES, controlStates, formatDuration) are frozen
+// constants or pure functions with no access to engine state, so they cannot
+// widen the guard (ADR-0002).
 export function createTimerEngine() {
   let phase = PHASES.FOCUS;
   let running = false;
@@ -71,7 +80,7 @@ export function createTimerEngine() {
   function pause(now) {
     settle(now);
     if (!running) return; // AC-02b: not running — no-op
-    remainingMs = Math.max(0, deadlineAt - now);
+    remainingMs = clampRemaining(phase, deadlineAt - now);
     running = false;
     deadlineAt = null;
   }
@@ -85,7 +94,7 @@ export function createTimerEngine() {
 
   function getSnapshot(now) {
     settle(now);
-    const remaining = running ? Math.max(0, deadlineAt - now) : remainingMs;
+    const remaining = running ? clampRemaining(phase, deadlineAt - now) : remainingMs;
     return Object.freeze({
       phase,
       running,
@@ -95,6 +104,16 @@ export function createTimerEngine() {
   }
 
   return Object.freeze({ start, pause, reset, getSnapshot });
+}
+
+// Pure control-enablement mapping (AC-02): the Pause control is disabled
+// whenever the timer is not running. Kept here, not in src/ui/, so it is
+// unit-testable without a DOM.
+export function controlStates(snapshot) {
+  return Object.freeze({
+    startDisabled: snapshot.running,
+    pauseDisabled: !snapshot.running,
+  });
 }
 
 // Pure display formatting (spec §6 NFR): remaining time is always rounded UP to

@@ -9,7 +9,7 @@ files_hint: ["src/ui/index.js", "src/styles.css"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
 context_budget: "S"
-status: "todo"
+status: "done"
 ---
 
 # T4 — UI layer: render phase + countdown, wire Start/Pause/Reset, disabled states
@@ -31,7 +31,7 @@ This task builds the DOM layer that renders that visibility and is the only call
 
 ## Inlined context
 
-> `mount(root)` — the only caller of the logic factory's methods. Container(ui, "UI layer", "JS module (DOM)", "Renders phase + countdown; wires Start/Pause/Reset; reads tab visibility").
+> `mount(root, engine)` — the only caller of the logic factory's methods (the engine instance is created and injected by `src/main.js`, per `sad.md` §5). Container(ui, "UI layer", "JS module (DOM)", "Renders phase + countdown; wires Start/Pause/Reset; reads tab visibility").
 >
 > — `sad.md §5, Building block view + C4 Container, abridged` · full text: [sad.md](../sad.md)
 
@@ -101,12 +101,13 @@ Internal — no API surface.
 
 ## Checklist
 
-- [ ] `mount(root)` builds the phase label, countdown (`aria-live="polite"`), and Start/Pause/Reset buttons — `src/ui/index.js`
-- [ ] `render()` reads `engine.getSnapshot(Date.now())`, sets label/countdown text, toggles `startBtn.disabled`/`pauseBtn.disabled` per `snapshot.running` (AC-02) — `src/ui/index.js`
-- [ ] Wire each button's click handler to call the matching engine method with `Date.now()` then re-render — `src/ui/index.js`
-- [ ] Add a `document.visibilitychange` listener that re-renders immediately on return-to-visible (AC-05) — `src/ui/index.js`
-- [ ] Recurring render on an interval (≥1/sec, spec §6 NFR display update rate) while foreground — `src/ui/index.js`
-- [ ] Base styling for phase card, countdown, and control buttons — `src/styles.css`
+- [x] `mount(root, engine)` builds the phase label (`aria-live="polite"`), countdown (`role="timer"`), and Start/Pause/Reset buttons — `src/ui/index.js`
+- [x] `render()` reads `engine.getSnapshot(Date.now())`, sets label/countdown text, and derives `startBtn.disabled`/`pauseBtn.disabled` from the pure `controlStates(snapshot)` helper in `src/logic/index.js` (AC-02) — `src/ui/index.js`
+- [x] Wire each button's click handler to call the matching engine method with `Date.now()` then re-render — `src/ui/index.js`
+- [x] After Start/Pause, move focus to the now-enabled sibling control if focus was on the one that just got disabled, so keyboard activation never strands focus — `src/ui/index.js`
+- [x] Add a `document.visibilitychange` listener that re-renders immediately on return-to-visible (AC-05) — `src/ui/index.js`
+- [x] Recurring render on an interval (≥1/sec, spec §6 NFR display update rate) while foreground — `src/ui/index.js`
+- [x] Base styling for phase card, countdown, and control buttons — `src/styles.css`
 
 ## Edge cases
 
@@ -118,7 +119,7 @@ Internal — no API surface.
 
 ## Definition of Done
 
-- [ ] Manual check: opening the page shows Focus/full-duration/Pause-disabled (AC-08, AC-02)
-- [ ] Manual check: backgrounding then returning mid-phase updates immediately without waiting for the next interval tick (AC-05)
-- [ ] every Hard Rule inlined above still holds
-- [ ] lint + vet clean
+- [x] Manual check: opening the page shows Focus/full-duration/Pause-disabled (AC-08, AC-02)
+- [x] Manual check: backgrounding then returning mid-phase updates immediately without waiting for the next interval tick (AC-05)
+- [x] every Hard Rule inlined above still holds
+- [x] lint + vet clean

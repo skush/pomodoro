@@ -1,6 +1,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTimerEngine, formatDuration, PHASES } from '../../src/logic/index.js';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { createTimerEngine, formatDuration, controlStates, PHASES } from '../../src/logic/index.js';
 
 const MIN = 60 * 1000;
 const FOCUS = 25 * MIN;
@@ -69,6 +72,39 @@ describe('engine surface (AC-03)', () => {
       ['getSnapshot', 'pause', 'reset', 'start'],
     );
     assert.equal(Object.isFrozen(engine), true);
+  });
+
+  // AC-03 requires "a built, testable behavior, not merely an assumption about
+  // browser isolation" that input other than this page's own controls is
+  // ignored. ADR-0002 chose structural encapsulation over a runtime token:
+  // there is provably no channel (no `message` listener, no global mutator)
+  // through which such input could ever reach the engine in the first place.
+  // This is a source-level test of that structural guarantee, not a DOM test —
+  // the repo has no DOM/jsdom test environment configured, and the guard is a
+  // static property of the code, not a runtime race to reproduce.
+  test('no src/ file registers a window/global message listener or exposes any other input channel', () => {
+    const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src');
+    const forbidden = [/addEventListener\(\s*['"]message['"]/, /\bonmessage\b/, /\bpostMessage\(/, /BroadcastChannel/];
+
+    function scan(dir) {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scan(full);
+        } else if (entry.name.endsWith('.js')) {
+          const contents = readFileSync(full, 'utf8');
+          for (const pattern of forbidden) {
+            assert.equal(
+              pattern.test(contents),
+              false,
+              `${full} matches forbidden pattern ${pattern} — this would be an input channel AC-03/ADR-0002 forbid`,
+            );
+          }
+        }
+      }
+    }
+
+    scan(srcDir);
   });
 });
 
@@ -164,6 +200,56 @@ describe('drift-free countdown (spec §6 NFR, ADR core-timer/0001)', () => {
   });
 });
 
+describe('controlStates (AC-02)', () => {
+  test('Pause is disabled and Start enabled while idle', () => {
+    const engine = createTimerEngine();
+    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(0));
+    assert.equal(startDisabled, false);
+    assert.equal(pauseDisabled, true);
+  });
+
+  test('Pause is enabled and Start disabled while running', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(1000));
+    assert.equal(startDisabled, true);
+    assert.equal(pauseDisabled, false);
+  });
+
+  test('Pause is disabled again once paused', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.pause(1000);
+    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(1000));
+    assert.equal(startDisabled, false);
+    assert.equal(pauseDisabled, true);
+  });
+
+  test('Pause is disabled again once a phase completes and the next one is idle', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    const { pauseDisabled } = controlStates(engine.getSnapshot(FOCUS));
+    assert.equal(pauseDisabled, true);
+  });
+});
+
+describe('backward clock jump (stage-2 hardening, spec §6 NFR drift)', () => {
+  test('remaining time never exceeds the phase full duration if now moves backward', () => {
+    const engine = createTimerEngine();
+    engine.start(10_000); // started "at" t=10s
+    // A backward wall-clock jump makes `now` earlier than the start time.
+    const snap = engine.getSnapshot(0);
+    assert.equal(snap.remainingMs, FOCUS);
+  });
+
+  test('pause() also clamps the frozen remaining time to the full duration', () => {
+    const engine = createTimerEngine();
+    engine.start(10_000);
+    engine.pause(0);
+    assert.equal(engine.getSnapshot(0).remainingMs, FOCUS);
+  });
+});
+
 describe('reset (AC-06)', () => {
   test('returns the current phase to full duration and stops it, from any state', () => {
     const running = createTimerEngine();
@@ -184,7 +270,7 @@ describe('reset (AC-06)', () => {
     assert.equal(idle.getSnapshot(0).remainingMs, FOCUS);
   });
 
-  test('leaves phase, cycle position and in-cycle focus count unchanged', () => {
+  test('leaves phase, cycle position and in-cycle focus count unchanged when idle', () => {
     const engine = createTimerEngine();
     engine.start(0);
     engine.getSnapshot(FOCUS); // completes 1st focus session -> short break, focusCount 1
@@ -192,6 +278,33 @@ describe('reset (AC-06)', () => {
     const snap = engine.getSnapshot(FOCUS);
     assert.equal(snap.phase, PHASES.SHORT_BREAK);
     assert.equal(snap.focusCount, 1);
+    assert.equal(snap.remainingMs, SHORT);
+  });
+
+  test('leaves phase and focus count unchanged when reset while running', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(FOCUS); // completes 1st focus session -> short break, focusCount 1
+    engine.start(FOCUS); // start the short break running
+    engine.reset(FOCUS + 1000); // reset partway through it
+    const snap = engine.getSnapshot(FOCUS + 1000);
+    assert.equal(snap.phase, PHASES.SHORT_BREAK);
+    assert.equal(snap.focusCount, 1);
+    assert.equal(snap.running, false);
+    assert.equal(snap.remainingMs, SHORT);
+  });
+
+  test('leaves phase and focus count unchanged when reset while paused', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(FOCUS); // completes 1st focus session -> short break, focusCount 1
+    engine.start(FOCUS);
+    engine.pause(FOCUS + 1000); // paused partway through the short break
+    engine.reset(FOCUS + 2000);
+    const snap = engine.getSnapshot(FOCUS + 2000);
+    assert.equal(snap.phase, PHASES.SHORT_BREAK);
+    assert.equal(snap.focusCount, 1);
+    assert.equal(snap.running, false);
     assert.equal(snap.remainingMs, SHORT);
   });
 });

@@ -26,3 +26,12 @@
 > row still describing the drift NFR as "verified only manually," stale since T6's automated test
 > was added in `7e9d6e4` — was fixed in this pass. No task required new production code or new
 > commits beyond that doc fix.
+
+> **Review note (2026-09-27):** an independent `/sdd:review core-timer` pass (clean-context reviewer
+> agent) returned CHANGES REQUESTED with 4 stage-1 and 7 stage-2 findings — real gaps the pass above
+> missed because it verified against `tasks.json`'s own claims rather than a fresh trace of the whole
+> spec §5 AC set. All 11 were resolved (10 fixed in code/tests/docs, 1 folded into the fix above) —
+> see `docs/features/core-timer/_review/review-2026-09-27.md` for the full findings and resolutions.
+> Gate re-run after fixes: `npm test` 27/27 green, `npm run lint` clean, `npm run build` reproduces
+> `index.html` with no drift, all 6 `sad.md` Mermaid diagrams parse (`mmdc`). Status above reflects
+> the post-review state.

@@ -69,6 +69,26 @@ that structurally cannot open the channel AC-03 is worried about.
   open tabs), that feature reopens this decision — it does not retrofit silently, since adding any
   listener at all changes the premise this ADR relies on.
 
+## Amendment (2026-09-27)
+
+Two clarifications surfaced by `review`, neither reversing the decision above:
+
+- **"No other symbol" (Option 1, Decision outcome) meant no other *stateful* symbol.**
+  `src/logic/index.js` also exports `PHASES` (a frozen constant) and `formatDuration` /
+  `controlStates` (pure functions with no closure over engine state) — none of these can reach or
+  mutate a `createTimerEngine()` instance, so the guard holds in substance. The wording is corrected
+  here and in `sad.md` §5 to: *`src/logic/` exports exactly one stateful factory
+  (`createTimerEngine`); any other export must be a frozen constant or a pure function with no
+  access to engine state.*
+- **The verifying test is a source-level scan, not a dispatched `MessageEvent`.** This repo has no
+  DOM/jsdom test environment (`node:test` only), so "a test can dispatch a `MessageEvent` at
+  `window`" (Decision outcome) was not literally buildable without adding a new test dependency.
+  `test/logic/timer-engine.test.js` ("engine surface (AC-03)") instead asserts, by scanning every
+  `.js` file under `src/`, that no `addEventListener('message'`, `onmessage`, `postMessage`, or
+  `BroadcastChannel` exists anywhere — the same structural guarantee (no input channel exists to
+  reach the engine through), verified statically instead of by simulating an event that would have
+  had nothing to land on anyway.
+
 ## Links
 
 - Spec: [[../spec.md]] §5 AC-03, §6.1

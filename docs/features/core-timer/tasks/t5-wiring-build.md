@@ -9,7 +9,7 @@ files_hint: ["src/main.js", "index.html", "scripts/build.js"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
 context_budget: "S"
-status: "todo"
+status: "done"
 ---
 
 # T5 — Wire main.js and regenerate the committed index.html
@@ -23,9 +23,11 @@ status: "todo"
 
 This task has no dedicated §4 user story of its own — it is the wiring step that makes US-01 through US-06 reachable by a User opening the page at all, per the single manual wire-up convention.
 
-> `src/main.js` — wiring: instantiates the logic engine, hands it to ui.mount. The only manual wiring point.
+> `src/main.js` — wires `logic` and `ui` together. The only manual wiring point.
 >
 > — `CLAUDE.md, Structure, verbatim` · full text: [CLAUDE.md](../../../../CLAUDE.md)
+>
+> Concretely (`sad.md` §5, abridged): `main.js` instantiates the logic engine and hands it to `ui.mount(root, engine)`.
 
 ## Inlined context
 
@@ -57,10 +59,10 @@ This is a pure wiring/build task — it satisfies no §5 AC directly; it is the 
 
 ## Checklist
 
-- [ ] `src/main.js` imports `mount` from `src/ui/index.js` and calls it on `document.getElementById('app')` — `src/main.js`
-- [ ] Run `npm run build` to regenerate `index.html` from `src/` — `scripts/build.js`, `index.html`
-- [ ] Verify the regenerated `index.html` opens standalone with zero network requests beyond its own load (spec §6 NFR) — `index.html`
-- [ ] Commit the regenerated `index.html` alongside the `src/` changes in the same change set (`CLAUDE.md` build-then-commit workflow)
+- [x] `src/main.js` imports `mount` from `src/ui/index.js` and calls it on `document.getElementById('app')` — `src/main.js`
+- [x] Run `npm run build` to regenerate `index.html` from `src/` — `scripts/build.js`, `index.html`
+- [x] Verify the regenerated `index.html` opens standalone with zero network requests beyond its own load (spec §6 NFR) — `index.html`
+- [x] Commit the regenerated `index.html` alongside the `src/` changes in the same change set (`CLAUDE.md` build-then-commit workflow)
 
 ## Edge cases
 
@@ -71,7 +73,7 @@ This is a pure wiring/build task — it satisfies no §5 AC directly; it is the 
 
 ## Definition of Done
 
-- [ ] `npm run build` completes and `index.html` reflects the current `src/` content
-- [ ] Manual check: opening `index.html` in a browser shows the mounted timer with zero network requests in devtools
-- [ ] every Hard Rule inlined above still holds
-- [ ] lint + vet clean
+- [x] `npm run build` completes and `index.html` reflects the current `src/` content
+- [x] Manual check: opening `index.html` in a browser shows the mounted timer with zero network requests in devtools
+- [x] every Hard Rule inlined above still holds
+- [x] lint + vet clean

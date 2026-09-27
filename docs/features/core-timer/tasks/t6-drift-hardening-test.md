@@ -9,7 +9,7 @@ files_hint: ["test/logic/timer-engine.test.js"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
 context_budget: "S"
-status: "todo"
+status: "done"
 ---
 
 # T6 — Automated backgrounding/drift hardening test for QG-1
@@ -61,9 +61,9 @@ Internal — no API surface.
 
 ## Checklist
 
-- [ ] Add a deterministic test that starts a phase at `now = t0`, then calls `getSnapshot(now)` at `t0 + fullDuration - 1ms` and asserts remaining time reflects true elapsed time to the millisecond (no accumulator drift) — `test/logic/timer-engine.test.js`
-- [ ] Add a test that jumps `now` far beyond one phase duration (simulating a long sleep) and asserts exactly one phase boundary advanced (reuses/extends the AC-05 case from T3 if not already exhaustive) — `test/logic/timer-engine.test.js`
-- [ ] Note in the test file (comment) that this closes the sad §11 "manual-only" risk row — `test/logic/timer-engine.test.js`
+- [x] Add a deterministic test that starts a phase at `now = t0`, then calls `getSnapshot(now)` at `t0 + fullDuration - 1ms` and asserts remaining time reflects true elapsed time to the millisecond (no accumulator drift) — `test/logic/timer-engine.test.js`
+- [x] Add a test that jumps `now` far beyond one phase duration (simulating a long sleep) and asserts exactly one phase boundary advanced (reuses/extends the AC-05 case from T3 if not already exhaustive) — `test/logic/timer-engine.test.js`
+- [x] Note in the test file (comment) that this closes the sad §11 "manual-only" risk row — `test/logic/timer-engine.test.js`
 
 ## Edge cases
 
@@ -74,7 +74,7 @@ Internal — no API surface.
 
 ## Definition of Done
 
-- [ ] `npm test` passes including the new deterministic drift assertions
-- [ ] sad §11 risk row for QG-1's manual-only verification is updated to note the automated test exists
-- [ ] every Hard Rule inlined above still holds
-- [ ] lint + vet clean
+- [x] `npm test` passes including the new deterministic drift assertions
+- [x] sad §11 risk row for QG-1's manual-only verification is updated to note the automated test exists
+- [x] every Hard Rule inlined above still holds
+- [x] lint + vet clean

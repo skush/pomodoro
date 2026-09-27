@@ -9,7 +9,7 @@ files_hint: ["README.md", ".github/workflows/ci.yml"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
 context_budget: "S"
-status: "todo"
+status: "done"
 ---
 
 # T7 — README, GitHub Pages setup, and repo hygiene for core-timer
@@ -49,9 +49,9 @@ No §5 AC applies — this is a documentation/CI hygiene task with no User-obser
 
 ## Checklist
 
-- [ ] Document how to run/build/test the app and the build-then-commit workflow in `README.md`
-- [ ] Confirm/adjust the CI workflow runs `npm test` and `npm run lint` on push (`.github/workflows/ci.yml`)
-- [ ] Document (in `README.md`) how the committed `index.html` is served via GitHub Pages, with no separate build step required for the static host
+- [x] Document how to run/build/test the app and the build-then-commit workflow in `README.md`
+- [x] Confirm/adjust the CI workflow runs `npm test` and `npm run lint` on push (`.github/workflows/ci.yml`)
+- [x] Document (in `README.md`) how the committed `index.html` is served via GitHub Pages, with no separate build step required for the static host
 
 ## Edge cases
 
@@ -59,6 +59,6 @@ N/A — no runtime behavior; this task only produces documentation and CI config
 
 ## Definition of Done
 
-- [ ] `README.md` accurately describes the current `npm run build` / `npm test` / `npm run lint` commands
-- [ ] CI workflow passes on the current `main`/`master` branch
-- [ ] lint + vet clean
+- [x] `README.md` accurately describes the current `npm run build` / `npm test` / `npm run lint` commands
+- [x] CI workflow passes on the current `main`/`master` branch
+- [x] lint + vet clean

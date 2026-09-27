@@ -26,7 +26,7 @@
       "title": "Unit tests for the engine state machine (control no-ops, cadence, guard)",
       "layer": "tests",
       "deps": ["T1", "T2"],
-      "acs": ["AC-01", "AC-01b", "AC-02b", "AC-02c", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08"],
+      "acs": ["AC-01", "AC-01b", "AC-02", "AC-02b", "AC-02c", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08"],
       "dod": "npm test passes with cases covering every engine-level AC listed.",
       "files_hint": ["test/logic/timer-engine.test.js"],
       "file": "docs/features/core-timer/tasks/t3-engine-unit-tests.md"

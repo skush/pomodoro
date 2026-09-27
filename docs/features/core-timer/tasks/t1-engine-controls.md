@@ -9,7 +9,7 @@ files_hint: ["src/logic/index.js"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
 context_budget: "M"
-status: "todo"
+status: "done"
 ---
 
 # T1 — Implement engine control state machine (start/pause/reset + no-op guards)
@@ -117,12 +117,13 @@ Internal — no API surface.
 
 ## Checklist
 
-- [ ] Define `PHASES` enum and per-phase fixed durations (25/5/15 min) — `src/logic/index.js`
-- [ ] Implement `createTimerEngine()` initial state per AC-08 (Focus, full duration, not running, focusCount 0) — `src/logic/index.js`
-- [ ] Implement `start(now)` with the AC-01b no-op guard and AC-02c resume-from-remaining behavior — `src/logic/index.js`
-- [ ] Implement `pause(now)` with the AC-02b no-op guard — `src/logic/index.js`
-- [ ] Implement `reset(now)` preserving phase/cycle/focusCount per AC-06 — `src/logic/index.js`
-- [ ] Freeze the returned object to exactly `{ start, pause, reset, getSnapshot }`, no other exported mutator (AC-03) — `src/logic/index.js`
+- [x] Define `PHASES` enum and per-phase fixed durations (25/5/15 min) — `src/logic/index.js`
+- [x] Implement `createTimerEngine()` initial state per AC-08 (Focus, full duration, not running, focusCount 0) — `src/logic/index.js`
+- [x] Implement `start(now)` with the AC-01b no-op guard and AC-02c resume-from-remaining behavior — `src/logic/index.js`
+- [x] Implement `pause(now)` with the AC-02b no-op guard, clamping the frozen remaining time to `[0, full duration]` so a backward wall-clock jump can't inflate it — `src/logic/index.js`
+- [x] Implement `reset(now)` preserving phase/cycle/focusCount per AC-06 — `src/logic/index.js`
+- [x] Freeze the returned object to exactly `{ start, pause, reset, getSnapshot }`, no other exported mutator (AC-03) — `src/logic/index.js`
+- [x] Add the pure `controlStates(snapshot)` helper (`{startDisabled, pauseDisabled}`) so `src/ui/` never derives disabled-state logic itself (AC-02) — `src/logic/index.js`
 
 ## Edge cases
 
@@ -135,7 +136,7 @@ Internal — no API surface.
 
 ## Definition of Done
 
-- [ ] Unit tests for AC-01, AC-01b, AC-02b, AC-02c, AC-06, AC-08 pass
-- [ ] `createTimerEngine()` exports exactly `{ start, pause, reset, getSnapshot }`, verified by inspection/test (AC-03)
-- [ ] every Hard Rule inlined above still holds
-- [ ] lint + vet clean
+- [x] Unit tests for AC-01, AC-01b, AC-02b, AC-02c, AC-06, AC-08 pass
+- [x] `createTimerEngine()` exports exactly `{ start, pause, reset, getSnapshot }`, verified by inspection/test (AC-03)
+- [x] every Hard Rule inlined above still holds
+- [x] lint + vet clean

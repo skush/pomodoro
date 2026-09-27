@@ -2,7 +2,7 @@
 // The only caller of the logic engine's methods (AC-03) — no other input source
 // (no window 'message' listener, nothing else) is ever wired to it.
 
-import { createTimerEngine, formatDuration, PHASES } from '../logic/index.js';
+import { formatDuration, PHASES, controlStates } from '../logic/index.js';
 
 const PHASE_LABELS = {
   [PHASES.FOCUS]: 'Focus',
@@ -12,19 +12,18 @@ const PHASE_LABELS = {
 
 const RENDER_INTERVAL_MS = 250;
 
-export function mount(root) {
-  const engine = createTimerEngine();
-
+export function mount(root, engine) {
   root.innerHTML = '';
   const card = document.createElement('div');
   card.className = 'timer-card';
 
   const label = document.createElement('p');
   label.className = 'timer-phase';
+  label.setAttribute('aria-live', 'polite');
 
   const countdown = document.createElement('p');
   countdown.className = 'timer-countdown';
-  countdown.setAttribute('aria-live', 'polite');
+  countdown.setAttribute('role', 'timer');
 
   const controls = document.createElement('div');
   controls.className = 'timer-controls';
@@ -47,19 +46,33 @@ export function mount(root) {
 
   function render() {
     const snapshot = engine.getSnapshot(Date.now());
-    label.textContent = PHASE_LABELS[snapshot.phase] ?? snapshot.phase;
-    countdown.textContent = formatDuration(snapshot.remainingMs);
-    startBtn.disabled = snapshot.running;
-    pauseBtn.disabled = !snapshot.running;
+    const phaseText = PHASE_LABELS[snapshot.phase] ?? snapshot.phase;
+    if (label.textContent !== phaseText) label.textContent = phaseText;
+    const countdownText = formatDuration(snapshot.remainingMs);
+    if (countdown.textContent !== countdownText) countdown.textContent = countdownText;
+    const { startDisabled, pauseDisabled } = controlStates(snapshot);
+    startBtn.disabled = startDisabled;
+    pauseBtn.disabled = pauseDisabled;
+  }
+
+  // Moves focus to the control that just became enabled when the one the
+  // User's keyboard focus was on just got disabled, so Space/Enter activation
+  // never strands focus on a now-inert button (US-02 keyboard activation).
+  function refocusIfStranded(previouslyFocused, nowEnabledBtn) {
+    if (document.activeElement === previouslyFocused && !nowEnabledBtn.disabled) {
+      nowEnabledBtn.focus();
+    }
   }
 
   startBtn.addEventListener('click', () => {
     engine.start(Date.now());
     render();
+    refocusIfStranded(startBtn, pauseBtn);
   });
   pauseBtn.addEventListener('click', () => {
     engine.pause(Date.now());
     render();
+    refocusIfStranded(pauseBtn, startBtn);
   });
   resetBtn.addEventListener('click', () => {
     engine.reset(Date.now());

@@ -2,7 +2,10 @@
 
 A single self-contained `index.html` Pomodoro timer. Vanilla JavaScript, no framework, no backend.
 
-**Live:** https://skush.github.io/pomodoro/
+**Live:** https://skush.github.io/pomodoro/ — GitHub Pages serves the committed root `index.html`
+straight off `master`, with no separate build step on the Pages side. That means `npm run build`
+must be run locally and the regenerated `index.html` committed *before* pushing — Pages only ever
+sees whatever is already in the file at HEAD.
 
 ## Run it
 
