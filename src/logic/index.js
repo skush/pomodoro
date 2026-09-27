@@ -146,6 +146,40 @@ export function shouldRollover(storedDate, now) {
   return localDateString(now) > storedDate;
 }
 
+const TASK_LABEL_MAX_LENGTH = 100;
+const STORED_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// session-tracking T3 (spec.md AC-02, §6 NFR "Task label length limit"): a hard
+// stop at 100 raw characters — never a post-hoc truncation. `nextValue` is what
+// the input's value would become after the browser applies the keystroke/paste;
+// if it would exceed the limit the whole attempt is rejected, reverting to
+// `previousValue` unchanged (a paste is never truncated to fit).
+export function validateLabelInput(previousValue, nextValue) {
+  if (nextValue.length > TASK_LABEL_MAX_LENGTH) {
+    return { value: previousValue, rejected: true };
+  }
+  return { value: nextValue, rejected: false };
+}
+
+// session-tracking T3 (spec.md §6 NFR "Corrupted or missing persisted state"):
+// pure per-field fallback — each field defaults independently, 0 exceptions
+// thrown across missing/malformed/wrong-type stored data.
+export function validateStoredCount(raw) {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return 0;
+  return n;
+}
+
+export function validateStoredDate(raw) {
+  if (typeof raw !== 'string' || !STORED_DATE_PATTERN.test(raw)) return null;
+  return raw;
+}
+
+export function validateStoredLabel(raw) {
+  if (typeof raw !== 'string') return '';
+  return raw;
+}
+
 // Pure display formatting (spec §6 NFR): remaining time is always rounded UP to
 // the next whole second so the full duration shows immediately and never skips
 // to one second less.
