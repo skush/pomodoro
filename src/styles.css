@@ -81,3 +81,31 @@ body {
   opacity: 0.4;
   cursor: default;
 }
+
+.task-label {
+  width: 100%;
+  margin-top: 1.25rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--fg);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 0.5rem;
+}
+
+.task-label::placeholder {
+  color: var(--muted);
+}
+
+.task-label-limit-message {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.session-count {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+}

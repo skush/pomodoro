@@ -9,7 +9,11 @@ import {
   validateStoredCount,
   validateStoredDate,
   validateStoredLabel,
+  validateLabelInput,
 } from '../logic/index.js';
+
+const LABEL_PLACEHOLDER = 'What are you focusing on?';
+const LABEL_LIMIT_MESSAGE = 'Task label is limited to 100 characters.';
 
 const COUNT_KEY = 'session-tracking:count';
 const DATE_KEY = 'session-tracking:date';
@@ -78,9 +82,49 @@ export function mount(root, engine) {
   resetBtn.type = 'button';
   resetBtn.textContent = 'Reset';
 
+  const labelField = document.createElement('input');
+  labelField.type = 'text';
+  labelField.className = 'task-label';
+  labelField.placeholder = LABEL_PLACEHOLDER;
+
+  const labelLimitMessage = document.createElement('p');
+  labelLimitMessage.className = 'task-label-limit-message';
+  labelLimitMessage.textContent = LABEL_LIMIT_MESSAGE;
+  labelLimitMessage.hidden = true;
+
   controls.append(startBtn, pauseBtn, resetBtn);
-  card.append(label, countdown, controls);
+  card.append(label, countdown, controls, labelField, labelLimitMessage);
   root.append(card);
+
+  const storage = window.localStorage;
+  const persisted = readPersistedState(storage);
+  labelField.value = persisted.label;
+  let lastAcceptedLabel = persisted.label;
+
+  // session-tracking T5 (spec.md AC-01/AC-01b/AC-02): live typing, no storage
+  // write on every keystroke — commit happens only on blur/Enter below. A
+  // keystroke or paste that would push the field past 100 raw characters is
+  // rejected in full (never truncated) — the DOM value reverts to the last
+  // accepted value and the inline limit message shows.
+  labelField.addEventListener('input', () => {
+    const { value, rejected } = validateLabelInput(lastAcceptedLabel, labelField.value);
+    if (rejected) {
+      labelField.value = value;
+    }
+    lastAcceptedLabel = value;
+    labelLimitMessage.hidden = !rejected;
+  });
+
+  function commitLabel() {
+    persistState(storage, { label: labelField.value });
+  }
+  labelField.addEventListener('blur', commitLabel);
+  labelField.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      labelField.blur();
+    }
+  });
 
   function render() {
     const snapshot = engine.getSnapshot(Date.now());
