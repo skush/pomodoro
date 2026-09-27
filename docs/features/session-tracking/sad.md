@@ -313,6 +313,139 @@ latches it internally the instant `settle()` fires and `getSnapshot()` consumes 
 (ADR-0001). Flow 2 shows the write-guard's practical shape (ADR-0002): every write is a plain
 overwrite through one function, never a merge with whatever the User might find already there.
 
+**Critical flow 3: Task-label typing, placeholder, and 100-character limit (US-01)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+
+    Note over UI: Precondition - the task label field currently holds no saved value
+    UI-->>User: placeholder hint shown ('What are you focusing on?')
+    User->>UI: types text into the task label field
+    UI-->>User: hint replaced - field shows the typed text live
+    loop each further keystroke or paste while under the limit
+        User->>UI: types or pastes more text
+        UI-->>User: field shows the updated text
+    end
+    alt the attempt would push the field past 100 characters (raw string length)
+        User->>UI: types or pastes beyond the 100th character
+        UI-->>User: further input is blocked - the field never exceeds 100 characters, inline message 'Task label is limited to 100 characters.'
+    else the User clears the field back to empty
+        User->>UI: clears the field
+        UI-->>User: placeholder hint shown again
+    end
+    Note over UI: Postcondition - the field holds at most 100 characters, nothing is written to storage yet (commit happens on blur/Enter - see Flow 2)
+```
+
+Flow 3 is pure UI state — no Engine or Storage participant, because nothing is persisted until the
+field is committed (Flow 2 covers that separately). It stays a hard stop at the 100th character
+(AC-02), never a truncate-after-the-fact, and the placeholder hint is a straightforward toggle on
+whether the field is empty (AC-01b).
+
+**Critical flow 4: Page load — restore label and display today's count, rollover-checked (US-02)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Storage as Local storage
+
+    Note over UI: Precondition - the page is opened or reloaded
+    UI->>Storage: read stored { label, count, date }
+    Storage-->>UI: last-committed label, count, and date (or each field's own default if missing/corrupted)
+    Note over UI: the same rollover check as Flow 1 Step 1 runs before anything is displayed
+    alt calendar day of now is later than stored date
+        UI->>Storage: write { count: 0, date: today } (rollover, via the centralized writer)
+        UI-->>User: today's count displays 0
+    else today is not later than stored date (including a clock moved backward)
+        UI-->>User: today's count displays the stored value
+    end
+    UI-->>User: task label field pre-filled with the stored label, or the placeholder hint if none
+    Note over UI: Postcondition - the displayed count and label both reflect the rollover-checked, persisted state
+```
+
+Flow 4 is the load-time counterpart to Flow 1: the same rollover decision (real now vs. stored date)
+runs on every read, not only right before a completion, so AC-04b's "0 if none yet today" and
+AC-06's "resets on the first read after midnight" are the same single check exercised from two
+different triggers.
+
+**Critical flow 5: Reset or break completion leaves the count unchanged (US-02)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+
+    Note over Engine: Precondition - a phase transitions via one of: User presses Reset, a Short break completes, a Long break completes
+    User->>UI: presses Reset (or a break phase's countdown reaches zero while running)
+    UI->>Engine: reset(now) / getSnapshot(now)
+    Engine-->>UI: snapshot { phase, ..., justCompletedFocusAt: null }
+    alt the transition was a Reset, or a Short/Long break completing
+        Note over UI: justCompletedFocusAt is null - no Focus completion occurred, the write guard's only counting trigger
+        UI-->>User: today's completed-session count is left exactly as it was
+    end
+    Note over UI: Postcondition - only a naturally-completed Focus phase (Flow 1) ever increments the count
+```
+
+Flow 5 is the negative case Flow 1 doesn't otherwise show: whenever `justCompletedFocusAt` comes
+back `null`, the count-writing branch of the centralized writer is never entered at all — Reset and
+the two break phases simply don't reach it (AC-05).
+
+**Cross-cutting: External write attempt ignored, overwritten by the app's own next legitimate write (US-05)**
+
+```mermaid
+sequenceDiagram
+    participant External as Another tab, origin, or a devtools edit
+    participant Storage as Local storage
+    participant UI as UI layer
+
+    Note over External,Storage: Precondition - something other than this page's own write guard changes the stored count, date, or label directly
+    External->>Storage: write { count / date / label } (not through the app's own centralized writer)
+    Note over UI: the running page never reads this change as a trigger for its own logic - no adoption happens
+    Note over UI: On the next legitimate trigger - a Focus completion, the label's own commit, or a daily-rollover check
+    UI->>Storage: write { the app's own current in-memory state } (via the centralized writer, ADR-0002)
+    Note over Storage: overwrites whatever the external write left behind
+    Note over UI,Storage: Postcondition - only the app's own three legitimate triggers (Flows 1, 2, 3-via-blur, 4's rollover) ever determine what ends up saved (AC-07)
+```
+
+This flow has no `<user>` actor reaching it — US-05's own ux-flows.md already notes there's no
+User-driven path to AC-07 — so it's drawn cross-cutting rather than folded into a per-user-story
+flow, with `<external-system>` standing in for whatever bypasses the app's own three legitimate
+write triggers. There's no read-modify-write reconciliation: the app's own next write is a full
+overwrite of its current in-memory state, same as every other write in Flows 1, 2, and 4.
+
+**Coverage check.**
+
+*User stories (§4):* US-01 → Flow 3; US-02 → Flows 1, 4, 5; US-03 → Flow 2; US-04 → Flow 1;
+US-05 → the Cross-cutting flow. Every §4 user story maps to at least one flow.
+
+*Acceptance criteria (§5):*
+
+| AC | Shown by |
+|---|---|
+| AC-01 | Flow 3 |
+| AC-01b | Flow 3 |
+| AC-02 | Flow 3 |
+| AC-03 | Flow 2 |
+| AC-04 | Flow 1 |
+| AC-04b | Flow 4 |
+| AC-05 | Flow 5 |
+| AC-06 | Flow 1 |
+| AC-06b | Flow 1 |
+| AC-07 | Cross-cutting flow |
+
+All 10 acceptance criteria are shown by a dedicated flow or an `alt`/`else` branch within one — no
+AC is left uncovered.
+
+**Flagged for `design`:** the Cross-cutting flow's `External` participant (another tab/origin, or a
+devtools edit) is not a participant §5's building-block view declares — §5 only names User, UI
+layer, Timer engine, and Local storage. It's drawn here because AC-07 requires showing where a
+non-app write comes from, but `design` may want to fold it into §5's Context (it's really the same
+Browser runtime already declared in §3, just a second tab or devtools acting through it) rather than
+leaving it as an implicit fifth actor.
+
 ## 7. Deployment view
 
 <!-- N/A: reuses the existing single-file deployment unit (index.html, generated by `npm run build`
