@@ -141,6 +141,29 @@ describe('backgrounding reconciliation (AC-05)', () => {
   });
 });
 
+describe('drift-free countdown (spec §6 NFR, ADR core-timer/0001)', () => {
+  test('remaining time is exact after repeated irregular polling, with no accumulated error', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    // Poll at jittery, non-uniform intervals (simulating rAF/setInterval jitter)
+    // rather than a fixed tick — an accumulator-based clock would drift here;
+    // a wall-clock deadline cannot, by construction.
+    for (const t of [37, 241, 242, 990, 991, 4001, 15_000, 15_000, 60_007]) {
+      const snap = engine.getSnapshot(t);
+      assert.equal(snap.remainingMs, FOCUS - t);
+    }
+  });
+
+  test('a long backgrounding gap that does not cross the phase boundary still yields exact remaining time', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    const backgroundedFor = FOCUS - 1000; // tab frozen for ~24 minutes, still mid-phase
+    const snap = engine.getSnapshot(backgroundedFor);
+    assert.equal(snap.phase, PHASES.FOCUS);
+    assert.equal(snap.remainingMs, 1000); // exact, not approximated from elapsed ticks
+  });
+});
+
 describe('reset (AC-06)', () => {
   test('returns the current phase to full duration and stops it, from any state', () => {
     const running = createTimerEngine();
