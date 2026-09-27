@@ -21,7 +21,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 |---|---|---|:---:|---|
 | 1 | Materialize the greenfield skeleton | `architecture-map.md` §Stack | XS | shipped |
 | 2 | [Core timer engine + controls](features/core-timer/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
-| 3 | Session tracking (task label + daily counter) | `idea-brief.md` §1 Raw idea | XS | idea |
+| 3 | [Session tracking (task label + daily counter)](features/session-tracking/spec.md) | `idea-brief.md` §1 Raw idea | XS | spec'd |
 | 4 | Adjustable durations | `idea-brief.md` §7 Recommendation | XS | idea |
 | 5 | Sensory feedback (progress ring, tab-title mirror, chime, dark UI) — deferred, built last | `idea-brief.md` §1 Raw idea | S | idea |
 
@@ -40,7 +40,6 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | # | Question | Type | Owner | Blocks |
 |---|---|:---:|:---:|:---:|
 | D1 | Does changing a duration mid-session restart the current phase, or finish it at the old value? | grilling | human | 4 |
-| D2 | When does the daily session counter reset — local midnight, or a rolling 24h window? | grilling | human | 3 |
 
 ## Decisions so far
 
@@ -49,6 +48,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 - The shipped single-file `index.html` is generated from modular source by a build step, not hand-maintained → [`adr/0001-generate-single-file-from-modular-source.md`](adr/0001-generate-single-file-from-modular-source.md)
 - esbuild is the dev-time build tool → [`adr/0003-esbuild-as-the-build-tool.md`](adr/0003-esbuild-as-the-build-tool.md)
 - Greenfield skeleton scaffolded: vanilla JS/ES modules, `node:test`, ESLint, GitHub Actions CI → [`architecture-map.md`](architecture-map.md)
+- D2 resolved: the daily session counter resets at local midnight (not a rolling 24h window) → [`features/session-tracking/spec.md`](features/session-tracking/spec.md) §1
 
 ## Dependency graph
 

@@ -1,6 +1,6 @@
 ---
 status: Living
-updated_at: "2026-09-05"
+updated_at: "2026-09-27"
 ---
 
 # Domain Context — pomodoro
@@ -13,6 +13,7 @@ updated_at: "2026-09-05"
 - **Cycle** — the repeating sequence of 4 Focus phases separated by 3 Short breaks, followed by one Long break, after which it repeats from Focus #1. NOT a single phase or a single session.
 - **In-cycle focus count** — the ephemeral, in-memory count of Focus sessions completed since the last Long break (or since the page was loaded), used only to decide whether the next break is Short or Long. NOT persisted across reloads, and NOT the same as the *Session counter* below — it wraps to zero the instant a Long break begins.
 - **Session counter** — the count of completed Focus sessions for the current day, persisted across reloads (introduced by the Session-tracking step). NOT the same as the *in-cycle focus count* — it is cumulative for the whole day and outlives any single cycle; how/when it persists and resets is that later step's concern, not core-timer's.
+- **Task label** — the optional free-text note the User types to record what they're focusing on; a single current value (not a per-session log), persisted across reloads via `localStorage` and pre-filled from the last-saved value on the next page load. NOT Phase — Phase is the timer's current segment (Focus/Short break/Long break); Task label is just the User's free-text note about what they're working on, unrelated to phase state.
 
 ## Invariants
 
