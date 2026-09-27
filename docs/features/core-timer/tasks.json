@@ -1,0 +1,75 @@
+{
+  "slug": "core-timer",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Implement engine control state machine (start/pause/reset + no-op guards)",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-01", "AC-01b", "AC-02b", "AC-02c", "AC-03", "AC-06", "AC-08"],
+      "dod": "Unit tests for AC-01, AC-01b, AC-02b, AC-02c, AC-06, AC-08 pass and createTimerEngine() exports exactly {start, pause, reset, getSnapshot}.",
+      "files_hint": ["src/logic/index.js"],
+      "file": "docs/features/core-timer/tasks/t1-engine-controls.md"
+    },
+    {
+      "id": "T2",
+      "title": "Implement phase cadence and backgrounding reconciliation (settle/getSnapshot)",
+      "layer": "domain",
+      "deps": ["T1"],
+      "acs": ["AC-04", "AC-05", "AC-07"],
+      "dod": "Unit tests for AC-04, AC-05, AC-07 pass, including a long-absence case that advances only one phase boundary.",
+      "files_hint": ["src/logic/index.js"],
+      "file": "docs/features/core-timer/tasks/t2-cadence-reconciliation.md"
+    },
+    {
+      "id": "T3",
+      "title": "Unit tests for the engine state machine (control no-ops, cadence, guard)",
+      "layer": "tests",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-01", "AC-01b", "AC-02b", "AC-02c", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08"],
+      "dod": "npm test passes with cases covering every engine-level AC listed.",
+      "files_hint": ["test/logic/timer-engine.test.js"],
+      "file": "docs/features/core-timer/tasks/t3-engine-unit-tests.md"
+    },
+    {
+      "id": "T4",
+      "title": "UI layer: render phase + countdown, wire Start/Pause/Reset, disabled states",
+      "layer": "ui",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-02", "AC-04", "AC-05", "AC-07", "AC-08"],
+      "dod": "Manual check confirms AC-08 initial state, AC-02 Pause disabled state, and AC-05 immediate reconciliation on tab return.",
+      "files_hint": ["src/ui/index.js", "src/styles.css"],
+      "file": "docs/features/core-timer/tasks/t4-ui-rendering-controls.md"
+    },
+    {
+      "id": "T5",
+      "title": "Wire main.js and regenerate the committed index.html",
+      "layer": "wiring",
+      "deps": ["T4"],
+      "acs": [],
+      "dod": "npm run build regenerates index.html cleanly and opening it in a browser shows zero network requests beyond the initial load.",
+      "files_hint": ["src/main.js", "index.html", "scripts/build.js"],
+      "file": "docs/features/core-timer/tasks/t5-wiring-build.md"
+    },
+    {
+      "id": "T6",
+      "title": "Automated backgrounding/drift hardening test for QG-1",
+      "layer": "tests",
+      "deps": ["T3"],
+      "acs": ["AC-05"],
+      "dod": "npm test passes including deterministic drift assertions closing the sad §11 manual-only-verification risk.",
+      "files_hint": ["test/logic/timer-engine.test.js"],
+      "file": "docs/features/core-timer/tasks/t6-drift-hardening-test.md"
+    },
+    {
+      "id": "T7",
+      "title": "README, GitHub Pages setup, and repo hygiene for core-timer",
+      "layer": "docs",
+      "deps": ["T5"],
+      "acs": [],
+      "dod": "CI workflow passes and README accurately documents build/test/lint commands and the GitHub Pages deployment.",
+      "files_hint": ["README.md", ".github/workflows/ci.yml"],
+      "file": "docs/features/core-timer/tasks/t7-hygiene-readme-pages.md"
+    }
+  ]
+}
