@@ -125,6 +125,27 @@ export function controlStates(snapshot) {
   });
 }
 
+// session-tracking T2 (spec.md AC-06/AC-06b): pure data-in/data-out, no engine-state
+// access — kept here so it's unit-testable under plain Node, same reasoning as
+// formatDuration/controlStates. Formats a ms timestamp as the LOCAL calendar day,
+// lexicographically sortable so string comparison equals date-order comparison.
+export function localDateString(ms) {
+  const d = new Date(ms);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+// session-tracking T2 (spec.md AC-06/AC-06b, sad.md §4 point 7): whether the
+// tracked day should roll forward. Compares the real current date against the
+// stored date ONLY — never a completing session's own day (that is a separate
+// comparison, done by the caller). Only ever resets forward: a stored date later
+// than now's (a backward clock/date change, AC-06b) never rolls over.
+export function shouldRollover(storedDate, now) {
+  if (!storedDate) return true; // no prior date — force a fresh rollover
+  return localDateString(now) > storedDate;
+}
+
 // Pure display formatting (spec §6 NFR): remaining time is always rounded UP to
 // the next whole second so the full duration shows immediately and never skips
 // to one second less.
