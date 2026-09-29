@@ -14,11 +14,13 @@ import {
   validateStoredDuration,
   validateStoredCycleLength,
   validateDurationInput,
+  validateCycleLengthInput,
 } from '../logic/index.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
 const LABEL_LIMIT_MESSAGE = 'Task label is limited to 100 characters.';
 const DURATION_RANGE_MESSAGE = 'Enter a whole number from 1 to 180.';
+const CYCLE_LENGTH_RANGE_MESSAGE = 'Enter a whole number from 2 to 8.';
 
 const COUNT_KEY = 'session-tracking:count';
 const DATE_KEY = 'session-tracking:date';
@@ -365,6 +367,28 @@ export function mount(root, engine) {
   durationsLegend.textContent = 'Durations (minutes)';
   durationsGroup.append(durationsLegend, ...durationFields.map(({ field }) => field.element));
   card.append(durationsGroup);
+
+  // adjustable-durations T6 (spec.md AC-10/AC-11/AC-14, sad.md §6 Flow 4): the engine
+  // only stores the new length — no retroactive Long break, in-cycle count and the
+  // session count untouched — then storage gets the FULL four-value state.
+  function commitCycleLength(value) {
+    config = { ...config, cycleLength: value };
+    engine.setCycleLength(value);
+    persistDurationConfig(storage, config);
+  }
+
+  const cycleLengthField = createNumericField({
+    id: 'cycle-length',
+    labelText: 'Focus sessions before a long break',
+    rangeMessage: CYCLE_LENGTH_RANGE_MESSAGE,
+    validate: validateCycleLengthInput,
+    initialValue: config.cycleLength,
+    onCommit: commitCycleLength,
+  });
+  const cycleGroup = document.createElement('div');
+  cycleGroup.className = 'settings-group';
+  cycleGroup.append(cycleLengthField.element);
+  card.append(cycleGroup);
 
   function render() {
     const now = Date.now();
