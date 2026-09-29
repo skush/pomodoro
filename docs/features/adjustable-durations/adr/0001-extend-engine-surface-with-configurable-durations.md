@@ -128,6 +128,8 @@ A gap surfaced by the `design` critic pass, corrected here rather than reopening
   happened before Pause was pressed. `setConfiguredDurations`/`setCycleLength` use exactly this
   comparison — against the *snapshotted* value, never a live re-read of the current config — to decide
   whether to update `remainingMs` immediately (idle) or defer to the next fresh start (paused).
+  *(The detection mechanism in this bullet is superseded by Amendment 2 below; the idle/paused
+  semantics it states still hold.)*
 - **`clampRemaining()`/`durationFor()`'s existing contract must be corrected, not left as-is.** As
   scanned pre-feature, both helpers read the *current* value of `durationFor(phase)` on every call,
   including inside `pause()` and `getSnapshot()` for an already-running phase. If `durationFor()`
@@ -145,6 +147,29 @@ A gap surfaced by the `design` critic pass, corrected here rather than reopening
 - Both points are additionally tracked as §11 risk rows in `sad.md` and must be covered by a dedicated
   unit test (config change while paused with a partially-elapsed `remainingMs`, distinct from the
   idle case) before this feature's `implement` stage is considered done.
+
+## Amendment 2 (2026-09-29, from review)
+
+Raised by the independent review (`_review/review-2026-09-29.md`, finding #5). The chosen option is
+unchanged; only the idle/paused detection mechanism in Amendment 1's first bullet is corrected to
+match what was built.
+
+- **Idle vs paused is tracked by a private `phaseStarted` flag, not by comparing `remainingMs`.**
+  `phaseStarted` is set by `start()` and cleared whenever a phase becomes fresh (`reset()`, and
+  `settle()` entering the next phase). **Idle** = `!phaseStarted`; **paused** = `phaseStarted &&
+  !running`. The `remainingMs`-comparison rule would misclassify a phase paused at the same instant it
+  started (no time elapsed yet, so `remainingMs` still equals the pinned full duration) as idle, and a
+  later commit would then change its frozen time — violating AC-05. A dedicated unit test covers that
+  case.
+- **The snapshot exposes the flag as `idle`** (`getSnapshot().idle === !phaseStarted`), so the UI can
+  tell a fresh Start from a Resume (the pre-start correction runs only on a fresh start — AC-06/AC-08)
+  without a second engine query. This adds a read-only snapshot field; the frozen method surface is
+  unchanged.
+- **The setters enforce the valid ranges themselves** (whole minutes 1–180; cycle length 2–8), ignoring
+  anything else fail-soft, so the AC-06 "never shorter than its valid minimum" invariant does not rest
+  on the callers alone.
+- Amendment 1's second bullet (the full duration pinned at start/reset — `phaseFullMs` — as
+  `clampRemaining()`'s upper bound) is implemented as written.
 
 ## Links
 

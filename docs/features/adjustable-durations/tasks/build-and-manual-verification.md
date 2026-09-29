@@ -80,3 +80,20 @@ _No spec §5 acceptance criterion maps to this task; its DoD is the NFR quoted u
 - [ ] `npm run build` output committed; `index.html` matches `src/`
 - [ ] Manual checks above recorded as passed
 - [ ] `npm test` and `npm run lint` clean
+
+## Verification record
+
+Corrected by review (`../_review/review-2026-09-29.md`, finding #9). The T9 commit message (`3efe264`)
+said the manual checks were verified "via the e2e suite added in T11", but that suite landed in a later
+commit and at that point tested persistence only with a same-context `page.reload()`. The checks are now
+automated end-to-end against the built `index.html` in a real browser (system Edge), in
+`test-e2e/durations.e2e.js`:
+
+| NFR check | Test | Result (2026-09-29) |
+|---|---|---|
+| Durations + cycle length survive a full browser close and reopen | `NFR persistence (AC-09/AC-14): … survive a full browser close and reopen` — on-disk profile, browser process closed and relaunched | pass |
+| Commit only on blur/Enter, never on a keystroke | `NFR commit discipline: …` | pass |
+| Zero network requests beyond the initial `index.html` | `NFR self-contained load: …` | pass |
+| No layout shift across 1–180 min and the 100:00 → 99:59 crossing | `NFR display width: …` | pass |
+
+Still manual-only (not automated): a close/reopen check in a browser other than Edge.
