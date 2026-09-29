@@ -17,7 +17,9 @@ core-timer and session-tracking shipped a trustworthy fixed-cadence timer (25/5/
 
 There's no external trigger — this is the next unblocked roadmap step (`docs/roadmap.md` step 4), now that session-tracking is shipped; `docs/idea-brief.md` §7 named adjustable durations as part of the original recommendation.
 
-The committed approach: each phase type gets a **Configured duration** (see `CONTEXT.md`) that the User sets and commits (blur/Enter, same discipline as the task label), clamped to 1–180 minutes rather than rejected outright, persisted in this browser's local storage, and read wherever the engine currently reads a hardcoded constant. A duration change never disturbs a phase that's already running or paused — it applies only the next time that phase type starts fresh — but an idle (not-yet-started) phase's display updates immediately. Alongside per-phase durations, the classic 4-focus cadence itself becomes configurable: a **Configured cycle length** (2–8 Focus sessions before a Long break, default 4, same commit/clamp/persistence discipline) replaces the fixed 4 — unlike a duration change, a cycle-length change applies immediately, including to whatever cycle is currently in progress, since it only changes a comparison threshold rather than disrupting a countdown already running. A `researcher` competitive pass found that no comparable app publicly documents this running/paused-timer edge case at all (competitors are either silent or avoid it entirely, e.g. offering only a post-completion "extend" action) — our explicit, tested rule is the differentiator. A `devils-advocate` failure-mode pass surfaced the sharpest risk this spec must close: a corrupted, zero, or non-numeric stored duration must never let a phase complete instantly and silently inflate the daily count — §5 AC-06 makes this a hard, tested invariant, the same fallback discipline session-tracking already applies to its own stored fields.
+The committed approach: each phase type gets a **Configured duration** (see `CONTEXT.md`) that the User sets and commits (blur/Enter, same discipline as the task label), restricted to a strict whole number of minutes from 1 to 180 — the same range for all three phase types, kept uniform for simplicity — a commit outside that range, or not a whole number at all, is rejected outright and reverts to the last valid value, the same discipline the task label already uses for its own limit. It's persisted in this browser's local storage and read wherever the engine currently reads a hardcoded constant; storage is re-read and re-validated at page load and again before each fresh start, so an invalid or out-of-range stored value (however it got there) is always corrected — falling back to that phase type's classic default — before it could ever be used. Alongside per-phase durations, the classic 4-focus cadence itself becomes configurable: a **Configured cycle length** (2–8 Focus sessions before a Long break, default 4, same commit/reject/persistence discipline) replaces the fixed 4 — unlike a duration change, a cycle-length change applies immediately, including to whatever cycle is currently in progress, since it only changes a comparison threshold rather than disrupting a countdown already running. A `researcher` competitive pass found that no comparable app publicly documents this running/paused-timer edge case at all (competitors are either silent or avoid it entirely, e.g. offering only a post-completion "extend" action) — our explicit, tested rule is the differentiator. A `devils-advocate` failure-mode pass surfaced the sharpest risk this spec must close: a corrupted, zero, or non-numeric stored duration must never let a phase complete instantly and silently inflate the daily count — §5 AC-06 makes this a hard, tested invariant, the same fallback discipline session-tracking already applies to its own stored fields.
+
+A duration or cycle-length commit is a new kind of input that changes the timer engine's own state (an idle phase's effective duration) outside of Start/Pause/Reset. This extends core-timer's control-guard (`docs/features/core-timer/adr/0002-structural-encapsulation-control-guard.md`): a commit, triggered only by this page's own UI and never by an external channel, is a legitimate fourth input alongside the original three — the guard's real intent (no message-driven or cross-tab tampering) is preserved, not weakened.
 
 `docs/roadmap.md`'s open decision D1 ("does changing a duration mid-session restart the current phase, or finish it at the old value?") is resolved here: **it finishes at the old value** — matching this spec's §5 AC-04/AC-05 and the "no chain of unattended transitions" philosophy core-timer's engine already follows. `CONTEXT.md`'s new "Configured duration" term (added alongside this spec) is what §5 formalizes as testable, business-observable behavior.
 
@@ -98,17 +100,19 @@ The committed approach: each phase type gets a **Configured duration** (see `CON
 
 ## 5. Acceptance criteria
 
+*A value is a valid whole number only in its strict form: an optional leading `-` followed only by digits — no decimal point, no letters, no exponent notation, no surrounding non-digit characters. A cleanly-formed but out-of-range number (e.g. `500`, `-5`) is still a valid whole number for AC-02/AC-11's purposes; `12.5`, `25abc`, `1e2`, and empty/non-numeric text are not valid whole numbers at all, for AC-06/AC-12's purposes.*
+
 ### AC-01 (US-01) — happy path
 
 **Given** a User is viewing the app with a phase type currently idle
-**When** the User types a new duration (in minutes, 1–180) for that phase type and commits it (blurs the field or presses Enter)
+**When** the User types a new duration for that phase type — a whole number of minutes, 1–180, the same range for every phase type — and commits it (blurs the field or presses Enter)
 **Then** the system saves that as the phase type's Configured duration, and the next time that phase type starts fresh, it runs for exactly that long
 
 ### AC-02 (US-01) — error
 
-**Given** a duration value — whether just committed by the User or read from storage — is a valid whole number outside the 1–180 minute range (e.g. 0, or 500)
-**When** the system encounters it (at commit time, or on page load / before that phase type would start)
-**Then** the system clamps it to the nearest valid bound (1 or 180 minutes) rather than rejecting a commit outright or discarding a stored value entirely, and — when this happens at commit time — shows the User the clamped value it actually saved. A value that isn't a valid whole number at all (non-numeric, empty, or otherwise unparsable) is handled differently — see AC-06 — never treated as a bound to clamp toward.
+**Given** a User commits a duration value that is not a valid whole number in the 1–180 minute range (out of range, non-numeric, empty, decimal, or otherwise not a strict whole number)
+**When** that commit happens
+**Then** the system rejects it outright — the field reverts to the last validly committed Configured duration for that phase type, unchanged — and shows the User an inline message stating the valid 1–180 range
 
 ### AC-03 (US-04) — happy path (idle immediate update)
 
@@ -122,6 +126,12 @@ The committed approach: each phase type gets a **Configured duration** (see `CON
 **When** the User commits a new Configured duration for that same phase type
 **Then** the system does not alter the running phase's remaining time in any way — it keeps counting down exactly as it was — and the new duration only takes effect the next time that phase type starts fresh
 
+### AC-04b (US-02) — domain invariant (Reset)
+
+**Given** the User changed a phase type's Configured duration while that phase was running or paused, per AC-04/AC-05
+**When** the User then presses Reset
+**Then** the now-idle phase reflects the current Configured duration (not whatever duration it was running or paused with) — Reset returns the phase to its fresh, idle state, and idle always shows the currently configured value, the same as AC-03
+
 ### AC-05 (US-05) — domain invariant
 
 **Given** a phase is currently paused, with a specific amount of time frozen as its remaining time
@@ -130,45 +140,45 @@ The committed approach: each phase type gets a **Configured duration** (see `CON
 
 ### AC-06 (US-06) — domain invariant
 
-**Given** a duration value — whether read from storage or just committed by the User — is missing, empty, non-numeric, or otherwise not a valid whole number at all (as distinct from AC-02's valid-but-out-of-bounds numeric case)
-**When** the system encounters it (on page load, before that phase type would start, or at commit time)
-**Then** the system treats it as no valid Configured duration and falls back to that phase type's classic default (Focus 25 minutes, Short break 5 minutes, Long break 15 minutes) — under no circumstance does an invalid value let a phase complete faster than its own valid minimum, or complete instantly
+**Given** a stored duration value for a phase type — encountered on page load or before that phase type would start fresh — is not a valid whole number in the 1–180 range (missing, malformed, non-numeric, decimal, or out of range)
+**When** the system encounters it
+**Then** the system treats it as no valid Configured duration, falls back to that phase type's classic default (Focus 25 minutes, Short break 5 minutes, Long break 15 minutes), and writes that default back to storage immediately — under no circumstance does an invalid stored value let a phase complete faster than its own valid minimum, or complete instantly
 
 ### AC-07 (US-07) — cross-context
 
-**Given** a User commits a new Configured duration for any phase type
+**Given** a User commits a new Configured duration or Configured cycle length
 **When** that commit happens
-**Then** the system leaves the in-cycle focus count, the current cycle position, and today's completed-session count (`docs/features/session-tracking/spec.md`) exactly as they were — a duration change never advances, resets, or otherwise alters progress already made
+**Then** the system leaves the in-cycle focus count and today's completed-session count (`docs/features/session-tracking/spec.md`) exactly as they were at that moment — a commit never advances, resets, or otherwise alters progress already made (AC-13 separately governs how a new cycle length shapes the *next* Long-break decision, a distinct point in time from the commit itself)
 
 ### AC-08 (US-08) — authorization
 
 **Given** the app's saved Configured durations and Configured cycle length
-**When** a write attempt to any of those values arrives from anything other than this app's own duration-commit or cycle-length-commit action (for example a message from another tab or origin, a change made in another same-origin tab, or a devtools edit)
-**Then** the system's write guard ignores that attempt as a trigger for its own logic, and the next time a legitimate commit saves the Configured durations or cycle length, it writes only the app's own current in-memory values for those settings — overwriting, never adopting, whatever those specific saved values had become in the meantime. This extends, but does not widen, session-tracking's existing write guard (`docs/features/session-tracking/spec.md` AC-07): the daily count, tracked date, and task label remain writable only by their own three existing triggers, unaffected by duration or cycle-length commits, exactly as before
+**When** a write attempt to any of those values arrives from anything other than this app's own duration-commit action, cycle-length-commit action, or its own load-time/pre-start correction (AC-06/AC-12) — for example a message from another tab or origin, a change made in another same-origin tab, or a devtools edit
+**Then** the system's write guard ignores that attempt as a trigger for its own logic, and the next time one of those three legitimate paths writes, it writes the full current in-memory state of all four settings together (all three durations plus the cycle length) — overwriting, never adopting, whatever had been saved in the meantime, even for the settings that particular write wasn't specifically about. This extends, but does not widen, session-tracking's existing write guard (`docs/features/session-tracking/spec.md` AC-07): the daily count, tracked date, and task label remain writable only by their own three existing triggers, unaffected by duration or cycle-length commits, exactly as before
 
 ### AC-09 (US-03) — happy path
 
 **Given** a User previously committed custom durations for one or more phase types
 **When** the User reopens or reloads the page
-**Then** the system pre-fills each phase type's duration field with exactly its last-committed Configured duration, or the classic default for any phase type never customized
+**Then** the system pre-fills each phase type's duration field with exactly the Configured duration currently in effect — its last-committed value, or the classic default if none was ever validly committed or storage needed correcting (AC-06)
 
 ### AC-10 (US-09) — happy path
 
 **Given** a User is viewing the app
-**When** the User types a new cycle length (a whole number, 2–8) and commits it (blurs the field or presses Enter)
+**When** the User types a new cycle length — a whole number, 2–8 — and commits it (blurs the field or presses Enter)
 **Then** the system saves that as the Configured cycle length, and it governs every Long-break decision from that point forward
 
 ### AC-11 (US-09) — error
 
-**Given** a cycle-length value — whether just committed by the User or read from storage — is a valid whole number outside the 2–8 range (e.g. 1, or 9)
-**When** the system encounters it (at commit time, or on page load)
-**Then** the system clamps it to the nearest valid bound (2 or 8) rather than rejecting a commit outright or discarding a stored value entirely, and — when this happens at commit time — shows the User the clamped value it actually saved
+**Given** a User commits a cycle-length value that is not a valid whole number in the 2–8 range (out of range, non-numeric, empty, decimal, or otherwise not a strict whole number)
+**When** that commit happens
+**Then** the system rejects it outright — the field reverts to the last validly committed Configured cycle length, unchanged — and shows the User an inline message stating the valid 2–8 range
 
 ### AC-12 (US-09) — domain invariant
 
-**Given** a cycle-length value — whether read from storage or just committed by the User — is missing, empty, non-numeric, or otherwise not a valid whole number at all (as distinct from AC-11's valid-but-out-of-bounds numeric case)
-**When** the system encounters it (on page load or at commit time)
-**Then** the system treats it as no valid Configured cycle length and falls back to the classic default of 4
+**Given** a stored cycle-length value — encountered on page load — is not a valid whole number in the 2–8 range (missing, malformed, non-numeric, decimal, or out of range)
+**When** the system encounters it
+**Then** the system treats it as no valid Configured cycle length, falls back to the classic default of 4, and writes that default back to storage immediately
 
 ### AC-13 (US-10) — cross-context
 
@@ -180,31 +190,31 @@ The committed approach: each phase type gets a **Configured duration** (see `CON
 
 **Given** a User previously committed a custom cycle length
 **When** the User reopens or reloads the page
-**Then** the system pre-fills the cycle-length field with exactly that last-committed Configured cycle length, or the classic default of 4 if never customized
+**Then** the system pre-fills the cycle-length field with exactly the Configured cycle length currently in effect — its last-committed value, or the classic default of 4 if none was ever validly committed or storage needed correcting (AC-12)
 
 ## 6. Non-functional requirements
 
 | Aspect | Target | Measurement |
 |---|---|---|
-| Duration bounds | Every Configured duration stays within 1–180 minutes at all times, whether freshly typed, freshly loaded, or previously corrupted — 0 exceptions | unit test on the validation/clamp function |
+| Duration bounds | Every Configured duration stays within 1–180 minutes at all times, for every phase type, whether freshly typed, freshly loaded, or previously corrupted — 0 exceptions | unit test on the validation function |
 | Commit discipline | A duration or cycle-length field's value applies (to display, storage, and the engine) only on blur/Enter, never on an intermediate keystroke while the User is still editing | manual check, mirroring session-tracking's task-label commit check |
-| Running/paused isolation | 100% of duration commits while that same phase type is running or paused leave its current remaining time byte-for-byte unchanged (AC-04/AC-05); a commit while idle updates the display immediately instead (AC-03) — both behaviors verified | unit test |
-| Corrupted/missing persisted duration | Each phase type's Configured duration falls back to its own classic default on any stored value that isn't a valid whole number at all (missing key, malformed value, non-numeric, wrong type — AC-06), and clamps to bounds when it's a valid but out-of-range number (AC-02) — 0 thrown exceptions, 0 instant completions either way | unit test with invalid stored data |
+| Running/paused isolation | 100% of duration commits while that same phase type is running or paused leave its current remaining time byte-for-byte unchanged (AC-04/AC-05); a commit while idle updates the display immediately instead (AC-03); Reset after such a change shows the current Configured duration, not the one that was running (AC-04b) — all three behaviors verified | unit test |
+| Corrupted/missing persisted duration | Each phase type's Configured duration falls back to its own classic default on any stored value that isn't a valid whole number in 1–180 (missing key, malformed value, non-numeric, decimal, or out of range — AC-06), immediately written back to storage — 0 thrown exceptions, 0 instant completions | unit test with invalid stored data |
 | Duration persistence | Configured durations survive 100% of a full browser close-and-reopen cycle, with 0 data loss, until the User clears site data | manual check: close and reopen the browser |
-| Display width | The countdown display never truncates, wraps, or shifts layout for any duration up to 180 minutes (a 3-digit minute value) | manual check across the full 1–180 range |
-| Cycle-length bounds | The Configured cycle length stays within 2–8 at all times, whether freshly typed, freshly loaded, or previously corrupted — 0 exceptions | unit test on the validation/clamp function |
-| Cycle-length persistence + fallback | Configured cycle length survives 100% of a full browser close-and-reopen cycle with 0 data loss (AC-14), and falls back to 4 on any stored value that isn't a valid whole number at all (AC-12), clamping instead when it's a valid but out-of-range number (AC-11) — 0 thrown exceptions either way | manual check (close/reopen) + unit test with invalid stored data |
+| Display width | Any phase type can reach a 3-digit minute value (up to 180); the countdown area reserves fixed width for the 3-digit case at all times, so no surrounding control ever shifts position — including mid-countdown as displayed minutes drop from 3 digits to 2 (e.g. 100:00 → 99:59) | manual check across the full 1–180 range, observed live through a 100→99 minute crossing |
+| Cycle-length bounds | The Configured cycle length stays within 2–8 at all times, whether freshly typed, freshly loaded, or previously corrupted — 0 exceptions | unit test on the validation function |
+| Cycle-length persistence + fallback | Configured cycle length survives 100% of a full browser close-and-reopen cycle with 0 data loss (AC-14), and falls back to 4 — written back to storage immediately — on any stored value that isn't a valid whole number in 2–8 (AC-12) — 0 thrown exceptions | manual check (close/reopen) + unit test with invalid stored data |
 | Self-contained load | Zero network requests beyond the initial `index.html` load (unchanged from core-timer/session-tracking) | manual check via the browser devtools Network tab |
 
 ## 6.1 Security / privacy
 
 - **Data classification:** internal — persisted only in this browser's local storage; nothing is transmitted anywhere.
 - **Personal data touched:** none — durations are plain numeric preferences, not personal data.
-- **AuthZ/AuthN impact:** none — single local User, no accounts; the only boundary is the AC-08 write guard on the duration and cycle-length keys (only this app's own duration-commit and cycle-length-commit actions trigger its own logic there; its own next write always overwrites whatever it finds saved) — a boundary kept separate from, and not widening, session-tracking's existing AC-07 write guard on the count/date/label keys.
+- **AuthZ/AuthN impact:** none — single local User, no accounts; the only boundary is the AC-08 write guard on the duration and cycle-length keys (only this app's own duration-commit, cycle-length-commit, and load-time/pre-start correction actions trigger its own logic there; each of those three writes the full current in-memory state of all four settings, overwriting whatever it finds saved) — a boundary kept separate from, and not widening, session-tracking's existing AC-07 write guard on the count/date/label keys.
 - **Abuse cases:**
   - a message from another tab or origin attempting to write a Configured duration or cycle length: ignored as a trigger, denied by the AC-08 guard, reinforced by (not resting solely on) the browser's own execution-context isolation.
-  - two tabs of this same app open at once, each independently committing different durations or cycle lengths to the same shared local storage: each tab's own next legitimate write (AC-08) overwrites whatever the other tab left behind — no reconciliation between tabs is attempted; accepted as the same known edge case session-tracking already accepts for its own count/label (`docs/features/session-tracking/spec.md` §6.1), extended here to durations and cycle length.
-  - a User editing local storage directly via devtools to set an extreme or invalid duration or cycle length: constrained on the next read by AC-06/AC-12's fallback (invalid → classic default) and AC-02/AC-11's clamp (in-range-but-extreme values like exactly 1/180 minutes or 2/8 sessions are valid and honored, by design) — never able to produce an instant or zero-length completion, or a cycle length outside 2–8.
+  - two tabs of this same app open at once, each independently committing different durations or cycle lengths to the same shared local storage: each tab's own next legitimate write (AC-08) writes its own full in-memory state (all four settings), overwriting whatever the other tab left behind — no reconciliation between tabs is attempted; accepted as the same known edge case session-tracking already accepts for its own count/label (`docs/features/session-tracking/spec.md` §6.1), extended here to durations and cycle length.
+  - a User editing local storage directly via devtools to set an extreme or invalid duration or cycle length: picked up passively at the next read point (page load, or before that phase type starts fresh) like any other stored value — a numeric value within range (exactly 1 or 180 minutes, or exactly 2 or 8 sessions) is valid and honored, by design; anything else falls back to the classic default and is written back (AC-06/AC-12) — never able to produce an instant or zero-length completion, or a cycle length outside 2–8.
 - **Security review:** N/A — no backend, no accounts, no persisted or transmitted data beyond this browser's own local storage (same reasoning as core-timer and session-tracking).
 
 ## 7. Metrics / KPIs
