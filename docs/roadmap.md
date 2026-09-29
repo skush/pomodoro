@@ -22,7 +22,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | 1 | Materialize the greenfield skeleton | `architecture-map.md` §Stack | XS | shipped |
 | 2 | [Core timer engine + controls](features/core-timer/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 3 | [Session tracking (task label + daily counter)](features/session-tracking/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
-| 4 | [Adjustable durations](features/adjustable-durations/spec.md) | `idea-brief.md` §7 Recommendation | S | spec'd |
+| 4 | [Adjustable durations + cycle length](features/adjustable-durations/spec.md) | `idea-brief.md` §7 Recommendation | S | spec'd |
 | 5 | Sensory feedback (progress ring, tab-title mirror, chime, dark UI) — deferred, built last | `idea-brief.md` §1 Raw idea | S | idea |
 
 ## Not yet specified
@@ -55,7 +55,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 flowchart LR
   s1["1 · Skeleton"] -->|module layout must exist first| s2["2 · Core timer"]
   s2 -->|needs the phase-completion event to increment/display against| s3["3 · Session tracking"]
-  s2 -->|extends the timer's duration config| s4["4 · Adjustable durations"]
+  s2 -->|extends the timer's duration config and cycle-length cadence| s4["4 · Adjustable durations"]
   s2 -->|needs the countdown/phase state to drive ring/title/chime| s5["5 · Sensory feedback"]
   s4 -->|ring/tab-title must read the adjustable duration, not a hardcoded one, to avoid rework| s5
 ```

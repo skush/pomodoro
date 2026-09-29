@@ -1,6 +1,6 @@
 ---
 status: Living
-updated_at: "2026-09-27"
+updated_at: "2026-09-29"
 ---
 
 # Domain Context — pomodoro
@@ -10,7 +10,7 @@ updated_at: "2026-09-27"
 - **User** — the single person running the timer in their own browser tab; there are no other roles (no accounts, no admin, no server-side actor). NOT a generic placeholder — every user story and acceptance criterion in this domain uses this exact role name.
 - **Phase** — the current segment of the Pomodoro cycle: Focus, Short break, or Long break, each with its own duration. NOT the same as *session* — a phase is what's currently running; a session is a specific completed Focus phase.
 - **Focus session** — a Focus phase whose countdown reached zero naturally (not ended early by Reset). NOT a Focus phase still in progress, and NOT a break phase.
-- **Cycle** — the repeating sequence of 4 Focus phases separated by 3 Short breaks, followed by one Long break, after which it repeats from Focus #1. NOT a single phase or a single session.
+- **Cycle** — the repeating sequence of N Focus phases (N = the Configured cycle length, default 4, User-adjustable between 2 and 8 — see `docs/features/adjustable-durations/CONTEXT.md`) separated by Short breaks, followed by one Long break, after which it repeats from Focus #1. NOT a single phase or a single session.
 - **In-cycle focus count** — the ephemeral, in-memory count of Focus sessions completed since the last Long break (or since the page was loaded), used only to decide whether the next break is Short or Long. NOT persisted across reloads, and NOT the same as the *Session counter* below — it wraps to zero the instant a Long break begins.
 - **Session counter** — the count of completed Focus sessions for the current day, persisted across reloads (introduced by the Session-tracking step). NOT the same as the *in-cycle focus count* — it is cumulative for the whole day and outlives any single cycle; how/when it persists and resets is that later step's concern, not core-timer's.
 - **Task label** — the optional free-text note the User types to record what they're focusing on; a single current value (not a per-session log), persisted across reloads via `localStorage` and pre-filled from the last-saved value on the next page load. NOT Phase — Phase is the timer's current segment (Focus/Short break/Long break); Task label is just the User's free-text note about what they're working on, unrelated to phase state.
@@ -18,4 +18,4 @@ updated_at: "2026-09-27"
 ## Invariants
 
 - The in-cycle focus count always increments only when a Focus phase completes naturally (reaches zero); it never changes on Reset or on switching phases early, and it resets to zero the instant a Long break begins.
-- Exactly every 4th completed Focus session (per the in-cycle focus count) is followed by a Long break; the 3 in between are each followed by a Short break.
+- A completed Focus session is followed by a Long break exactly when the in-cycle focus count has reached or passed N (N = the Configured cycle length, default 4); every other completed Focus session is followed by a Short break. Ordinarily this means every Nth session; if N is lowered while a cycle is already past the new N, the very next completion also triggers the Long break (`docs/features/adjustable-durations/spec.md` AC-13).
