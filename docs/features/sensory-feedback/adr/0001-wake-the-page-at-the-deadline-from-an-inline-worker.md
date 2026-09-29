@@ -81,6 +81,29 @@ Shape (for `tasks`; `src/ui/wakeup.js`):
   falls back to a main-thread `setTimeout`. This is fail-soft per `CLAUDE.md`. The chime still
   plays, possibly late in a hidden tab, and the case is listed in `sad.md` §11.
 
+### Amends core-timer ADR-0002
+
+[core-timer ADR-0002](../../core-timer/adr/0002-structural-encapsulation-control-guard.md) guarantees
+AC-03 structurally: there is no input channel through which anything but the User's own controls
+could reach the engine. `test/logic/timer-engine.test.js` enforces this by failing on any
+`addEventListener('message'`, `onmessage`, `postMessage(`, `BroadcastChannel` or `storage`
+listener anywhere under `src/`. Its Neutral consequence says a feature that adds a channel
+"reopens this decision — it does not retrofit silently". This ADR reopens it explicitly, with a
+narrow carve-out:
+
+- **Allowed:** exactly one channel, between the page and the `Worker` object it creates itself.
+  It lives in `src/ui/wakeup.js` only. The page-side handler is attached to that `Worker`
+  instance, never to `window` or any global, and it may do one thing: call the `onWake` callback
+  it was given (`render()`, a read).
+- **Still forbidden everywhere:** `window`/global `message` listeners, `storage` listeners, and
+  `BroadcastChannel`. No other page, tab or frame can reach this channel, because a dedicated
+  worker's port belongs to the page that created it.
+- **Enforcement:** the AC-03 scan is reworked, not deleted. `postMessage(` / `onmessage` are
+  permitted in `src/ui/wakeup.js` only. Every other pattern and every other file keeps its current
+  rule. `review` checks that the handler calls nothing but `onWake`.
+- The premise of core-timer ADR-0002 holds in substance: no engine control method is reachable from
+  any channel. A pointer amendment is added to that ADR.
+
 ## Consequences
 
 **Positive**
@@ -97,6 +120,9 @@ Shape (for `tasks`; `src/ui/wakeup.js`):
 
 **Negative**
 - One more moving part in `src/ui/`, and the first worker in the repo.
+- It reopens core-timer ADR-0002's "no input channel" premise. The AC-03 source-scan test must be
+  reworked, not just amended, to allow the one page↔worker channel (see "Amends core-timer
+  ADR-0002" above).
 - Playwright's fake page clock (used by `test-e2e/`) does not drive a worker's timers. The e2e
   suite verifies completion, chime selection and exactly-once through the normal render loop under
   the fake clock. True hidden-tab timing is verified by a real-time check plus the manual stopwatch
@@ -119,4 +145,6 @@ Shape (for `tasks`; `src/ui/wakeup.js`):
 - Spec: [[../spec.md]] AC-06, AC-06b, AC-07, §3, §6
 - SAD: [[../sad.md]] §4 (decision 3), §5, §6 Flows 1–2, §11
 - Related ADR: [[0002-extend-engine-snapshot-with-phase-length-and-completion-record]] (the render
-  path this wake-up triggers); [core-timer ADR-0001](../../core-timer/adr/0001-wall-clock-deadline-timing.md)
+  path this wake-up triggers); [core-timer ADR-0001](../../core-timer/adr/0001-wall-clock-deadline-timing.md);
+  [core-timer ADR-0002](../../core-timer/adr/0002-structural-encapsulation-control-guard.md) (amended
+  by this ADR, see "Amends core-timer ADR-0002")

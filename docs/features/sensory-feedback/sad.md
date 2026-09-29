@@ -48,6 +48,19 @@ guarantee as it is.
 
 <!-- Decision overrides (¶4) — populated by the critic resolution loop, empty otherwise. -->
 
+- Decision override: the worker-unavailable fallback stays silent (§8 Error handling, ADR-0001) —
+  rationale: the background timing promise (`spec.md` AC-06) is held for current stable desktop
+  Chrome and Firefox, where dedicated workers are available. That is confirmed by the `file://`
+  spike and the manual stopwatch run (§11). A browser that blocks workers (enterprise policy, an
+  extension) is outside that promise, and the chime still plays there, possibly late. A visible
+  warning would be new UI the spec and `ux-flows.md` don't have. (Critic finding, 2026-09-30.)
+- Decision override: the feature stays size S despite four new files and two new snapshot fields —
+  rationale: the files are splits inside the existing `src/logic/` and `src/ui/` modules, not new
+  architectural modules. The snapshot fields are an internal read-only interface between two layers
+  of the same `index.html`, not a public API. There is no migration, and 2–5 PRs remains realistic.
+  Re-run `/sdd:classify-size sensory-feedback` if `tasks` comes out above 5 PRs. (Critic finding,
+  2026-09-30.)
+
 ## 2. Constraints
 
 **Technical.**
@@ -92,10 +105,14 @@ guarantee as it is.
   as a thrown error or a dialog.
 - Design tokens are CSS custom properties on `:root` in `src/styles.css`, dark-mode only. There is
   no `docs/design-system.md` yet, and `ux-flows.md` recorded a **mobile-first** posture.
-- Two already-shipped pinned tests are affected: `test/logic/timer-engine.test.js` asserts the
-  exact snapshot/engine shape, and `test/logic/write-guard.test.js` scans all of `src/` for
-  `storage.setItem` callers. This feature adds snapshot fields (§4) and no storage writer, so only
-  the first needs a mechanical amendment. That is a `tasks`-stage item.
+- Already-shipped structural tests are affected. `test/logic/write-guard.test.js`, which scans
+  `src/` for `storage.setItem` callers, is **untouched**, because this feature adds no storage
+  writer. `test/logic/timer-engine.test.js` needs two changes. The first is a **mechanical**
+  amendment of the pinned snapshot shape (ADR-0002). The second is a **deliberate rework** of the
+  AC-03 source scan, which today forbids `postMessage(` / `onmessage` anywhere under `src/`. That
+  scan must now allow them in `src/ui/wakeup.js` alone, while `window` `message`/`storage`
+  listeners and `BroadcastChannel` stay forbidden everywhere. This amends core-timer ADR-0002 (see
+  ADR-0001 "Amends core-timer ADR-0002" and §11). Both changes are `tasks`-stage items.
 
 **Regulatory / external.**
 - Data classification: public. The step adds no data at all (`spec.md` §6.1).
@@ -241,7 +258,7 @@ src/
 │                      track + arc; the arc length is set through stroke-dashoffset, and the phase
 │                      colour through a data-phase attribute mapped to CSS tokens.>
 ├── styles.css        <new :root tokens: one ring colour per phase type + the ring track + the
-│                      notice colours; a short ring transition, removed entirely under
+│                      notice colours + a focus-indicator colour; a short ring transition, removed entirely under
 │                      @media (prefers-reduced-motion: reduce); layout checked at 320 CSS px.>
 └── main.js           <unchanged: mount(document.getElementById('app'), createTimerEngine())>
 ```
@@ -360,13 +377,13 @@ phase is idle, so nothing further completes unattended. `sequences` expands this
 |---|---|---|
 | Logging | N/A. There is no server; browser devtools only | — |
 | Authentication / authorization | N/A. Single local User, no accounts, no permission requested. Sound is enabled only by the User's Start/Resume press (AC-12) | `spec.md` §6.1 |
-| Input guard | The engine still changes only through its six control methods, called only from User-driven handlers in `src/ui/`. The wake-up worker's message calls `render()` (a read) and never a control method | [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation-control-guard.md), [ADR-0001](adr/0001-wake-the-page-at-the-deadline-from-an-inline-worker.md) |
+| Input guard | The engine still changes only through its six control methods, called only from User-driven handlers in `src/ui/`. The one message channel in `src/` is the private page↔worker channel in `src/ui/wakeup.js`. Its handler sits on the page's own `Worker` object, never on `window`, and may only call `onWake` (= `render()`, a read), never a control method. The AC-03 source scan is reworked to allow exactly that file; `window` `message`/`storage` listeners and `BroadcastChannel` stay forbidden everywhere (amends core-timer ADR-0002) | [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation-control-guard.md), [ADR-0001](adr/0001-wake-the-page-at-the-deadline-from-an-inline-worker.md) |
 | Error handling | Fail-soft in `src/ui/`: a missing or blocked `AudioContext`, a failing `resume()`, a throwing `play`, or a worker that can't be constructed is caught. The timer, ring, title and Session counter carry on unchanged (AC-11). Only sound failure is User-visible, as the plain-language inline notice; worker failure silently falls back to a main-thread timer | `CLAUDE.md` Conventions; `spec.md` AC-11 |
 | One-shot consumption | `render()` is the single `getSnapshot()` caller in `src/ui/`. Both `justCompletedFocusAt` and `justCompleted` are consumed there, in a fixed order: title → ring → chime/notice → Session counter | [ADR-0002](adr/0002-extend-engine-snapshot-with-phase-length-and-completion-record.md) |
 | Timing source | Every cue derives from the engine's wall-clock deadline. The render loop and the worker only decide *when to look*, never *whether a phase completed* | [core-timer ADR-0001](../core-timer/adr/0001-wall-clock-deadline-timing.md) |
-| Design tokens / theming | Dark-only CSS custom properties on `:root` in `src/styles.css`, extended with one ring colour per phase type, the ring track colour and the notice colours. `src/styles.css` stays the single token source; the contrast unit test reads the tokens from it, not from a copy | `architecture-map.md` §Frontend; `spec.md` §6 contrast rows |
+| Design tokens / theming | Dark-only CSS custom properties on `:root` in `src/styles.css`, extended with one ring colour per phase type, the ring track colour, the notice colours and a focus-indicator colour. `src/styles.css` stays the single token source; the contrast unit test reads the tokens from it, not from a copy | `architecture-map.md` §Frontend; `spec.md` §6 contrast rows |
 | Motion | The ring changes once per second (ringFraction steps with the displayed second). A short transition smooths each step. Under `prefers-reduced-motion: reduce`, all ring transitions (depletion, refill, colour change) are removed | `spec.md` AC-01, §6 "Reduced motion" |
-| Accessibility | Phase name stays visible text (colour is an extra cue, AC-03). The notice is a `role="status"` live region. Whether a Phase completion is announced to screen readers stays open (`spec.md` §8, Tech Lead, before `sdd:screens`) | `spec.md` AC-03, AC-11, §8 |
+| Accessibility | Phase name stays visible text (colour is an extra cue, AC-03). How the sound-unavailable notice and a Phase completion are announced to screen readers (live-region semantics) is **not decided here**. It goes to `sdd:screens`, together with `spec.md` §8's open question (Tech Lead, before `sdd:screens`) | `spec.md` AC-03, AC-11, §8 |
 | ID strategy / i18n / events | N/A. No records, single language (English UI text), no event bus (direct calls + one worker message) | [`adr/0002-no-backend-for-v1`](../../adr/0002-no-backend-for-v1.md) |
 | Observability | N/A. NFRs are verified by unit tests, e2e and the manual timing runs in `spec.md` §6 | `spec.md` §6 |
 
@@ -380,7 +397,7 @@ phase is idle, so nothing further completes unattended. `sequences` expands this
 ADR files live under `docs/features/sensory-feedback/adr/NNNN-<title>.md`. Inherited and still
 binding: [core-timer ADR-0001](../core-timer/adr/0001-wall-clock-deadline-timing.md) (wall-clock
 deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation-control-guard.md)
-(control guard), [session-tracking ADR-0001](../session-tracking/adr/0001-expose-true-focus-completion-timestamp.md)
+(control guard; amended by this feature's ADR-0001 to allow the one private worker channel), [session-tracking ADR-0001](../session-tracking/adr/0001-expose-true-focus-completion-timestamp.md)
 (Focus-completion timestamp), and the project-wide [`docs/adr/`](../../adr/) 0001–0003.
 
 ## 10. Quality requirements
@@ -426,8 +443,10 @@ deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation
   reduced motion, "0 animated ring transitions … the ring changes at most once per second, in
   discrete steps" (`spec.md` §6, verbatim).
 - **How verify:** unit tests for `ringFraction` against `formatDuration` over sampled snapshots
-  (including a mid-phase duration commit, AC-08). An automated contrast unit test parses the `:root`
-  tokens from `src/styles.css` and checks the declared text-on-background and ring pairs. e2e
+  (including a mid-phase duration commit, AC-08), plus an e2e sample of the rendered ring against the
+  on-page countdown ("unit + e2e sample", `spec.md` §6). An automated contrast unit test parses the
+  `:root` tokens from `src/styles.css` and checks the declared text-on-background pairs, the ring
+  pairs (each phase colour on the background and on its track) and the focus-indicator pair. e2e
   viewport check at 320 CSS px. e2e with reduced motion emulated (`spec.md` §6).
 
 ## 11. Risks and technical debt
@@ -442,6 +461,7 @@ deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation
 | True hidden-tab timing can't be proven by the headless e2e: headless doesn't throttle like a real hidden tab, and the fake page clock doesn't drive the worker | Medium | Split verification: exactly-once and tone choice under the fake clock; a real-time hidden-page e2e; the manual stopwatch run in desktop Chrome + Firefox that `spec.md` §6 already requires, recorded at `review` | sergii.kushnir@gmail.com |
 | Browser throttling policy could change, for example if worker timers become throttled in hidden tabs | Low | The manual timing check above catches it. The spec already scopes the promise to current stable desktop Chrome/Firefox | Tech Lead |
 | `test/logic/timer-engine.test.js` pins the snapshot shape; ADR-0002 adds two fields | Low | Mechanical amendment in the same PR, tracked as a `tasks` item | Tech Lead |
+| The wake-up worker reopens core-timer ADR-0002. Its AC-03 source scan currently fails on any `postMessage(` / `onmessage` under `src/` | Medium | This is a deliberate amendment, not a mechanical edit (ADR-0001 "Amends core-timer ADR-0002", plus a pointer amendment in core-timer ADR-0002). The scan allows the page↔worker channel in `src/ui/wakeup.js` only and still forbids `window` `message`/`storage` listeners and `BroadcastChannel` everywhere. `review` checks that the worker handler calls only `onWake` | Tech Lead |
 | A second `getSnapshot()` caller in `src/ui/` would silently consume a completion, so no chime and no session credit | Medium | §8 "One-shot consumption" convention. The `review` checklist item is "render() is the only getSnapshot caller"; a source-scan unit test like `write-guard.test.js` is optional | Tech Lead |
 | The `AudioContext` stays open after the first Start for the life of the page | Low | Accepted for v1. It is silent between tones, and keeping it running is what lets a completion play without a new gesture. Revisit if battery impact is reported | sergii.kushnir@gmail.com |
 | Spec open questions carried forward: mute control; screen-reader announcement of a completion; exact tone character | Open question | Owned in `spec.md` §8: mute (sergii.kushnir@gmail.com, 2 weeks after ship), screen reader (Tech Lead, before `sdd:screens`), tones (sergii.kushnir@gmail.com, before `sdd:implement`). `TONES` as data (§4 decision 6) keeps the tone answer a data-only change | per `spec.md` §8 |
