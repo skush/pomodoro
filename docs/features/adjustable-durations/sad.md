@@ -420,32 +420,33 @@ ADR files live under `docs/features/adjustable-durations/adr/NNNN-<title>.md`.
 
 ## 11. Risks and technical debt
 
-<!-- 🎯 Why: ⭐ collects EVERYTHING that can break — not only the technical. Without §11 risks get
-     discussed at standups and lost; debt lives only in the head of whoever accepted it.
-     📋 Write: a risk/debt table — severity — mitigation — owner. Accepted debt in its own block.
-     📌 The first risk is often a product risk, not a technical one. That's normal. -->
-
-<!-- Severity literals: Low / Medium / High for regular risks; "Open question" for rows created by
-     a Save-as-OQ resolution during the Socratic walk (see references/socratic.md). -->
+<!-- brownfield gotchas: docs/architecture-map.md predates core-timer's and session-tracking's
+     implementation entirely — see the stale-map risk row below. No other legacy code carries debt
+     into this feature; src/logic/index.js and src/ui/index.js are the same two files
+     session-tracking shipped and tested. -->
 
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
-| <e.g. Worker lag may reach hours during a downstream outage> | Medium | <alert >10 min, on-call playbook, retry backoff> | <DevOps> |
-| <e.g. No event-schema versioning in v1> | Medium | <ADR-NNNN planned for v2, tolerate unknown fields> | <Backend> |
-| Open architectural decision: <decision-headline> | Open question | Resolve before <stage trigger or YYYY-MM-DD>; <inline rationale from the Save-as-OQ> | <owner> |
+| `docs/architecture-map.md` is stale (`reflects_commit: 9c8717e`, predates both core-timer and session-tracking entirely) | Medium | This SAD used a fresh explorer scan instead; recommend running `survey` to refresh the map, not blocking this pass | Tech Lead |
+| Widening `createTimerEngine()`'s public surface from 4 to 6 methods touches an already-shipped, reviewed module (ADR-0001) | Medium | Kept purely additive (two new methods, no signature change to the existing four, no altered existing behavior) and covered by new unit tests alongside the existing suite | Tech Lead |
+| Two structurally similar but independent write-guard functions (`persistState`, `persistDurationConfig`) now live in `src/ui/index.js` — a future reader must know which owns which keys | Low | Named distinctly, each with a source-level scan test proving it's the only caller of `storage.setItem` for its own key set (mirroring the AC-03/AC-07 test style); documented in §8 | Tech Lead |
+| Two tabs of this same app open at once can race on writes to the same shared local storage, including the four new duration/cycle-length keys | Low | Accepted per `spec.md` §6.1 — each tab's own next legitimate write (ADR-0002) overwrites the other's; no reconciliation attempted this step, same accepted gap session-tracking already carries for count/date/label | N/A (accepted) |
+| Open decision: should quick-select duration presets be added alongside free-form input? | Open question | Resolve before a future step reconsiders it; default now is free-form numeric input only (`spec.md` §8) | sergii.kushnir@gmail.com |
+| Open decision: is the accepted multi-tab non-reconciliation gap worth solving generally across the storage layer, rather than per-feature? | Open question | Resolve before a future step that adds a second write surface (e.g. cross-device sync), if one is ever added (`spec.md` §8) | sergii.kushnir@gmail.com |
 
 **Accepted debt (acceptable in v1, plan to fix later):**
-- <e.g. the entity is immutable / unversioned — OK for v1, may need audit versioning in v2>
+- The two-tab write race (see risk row above) is accepted for v1; a future step could add cross-tab
+  reconciliation via the storage-change event if it becomes a real problem (`spec.md` §6.1).
+- No preset duration profiles — free-form numeric input only for v1; presets are a UX nicety
+  deferred to a possible future step (`spec.md` §3 Non-goals).
 
 ## 12. Glossary
 
-<!-- 🎯 Why: ⭐ the DOMAIN GLOSSARY that ends arguments a year later («checkpoint — weekly or
-     biweekly? quarter — calendar or fiscal?»).
-     📋 Write: a term / meaning table. Business + technical terms mixed.
-     📌 e.g. «Lesson | a unit inside a course made of blocks (text, video)». -->
-
 | Term | Meaning |
 |---|---|
-| <e.g. domain object A> | <its meaning in this domain> |
-| <e.g. domain object B> | <its meaning> |
-| <e.g. domain invariant name> | <the rule, in plain language> |
+| Configured duration | The User-set length per phase type (Focus/Short break/Long break), persisted across reloads, applying the next time that phase type starts fresh (`CONTEXT.md`) |
+| Configured cycle length | The User-set number of Focus phases (2–8, default 4) that must complete before the next Long break, persisted across reloads and applied to the very next Long-break decision, including mid-cycle (`CONTEXT.md`) |
+| Phase | The current segment of the cycle — Focus, Short break, or Long break (`CONTEXT.md`) |
+| Cycle | The repeating sequence of N Focus phases (N = the Configured cycle length) separated by Short breaks, followed by one Long break (`CONTEXT.md`) |
+| In-cycle focus count | The ephemeral, in-memory count of Focus sessions completed since the last Long break, compared against the Configured cycle length to decide the next break type (`CONTEXT.md`) |
+| User | The single person running the timer in their own browser tab; no other roles (`CONTEXT.md`) |
