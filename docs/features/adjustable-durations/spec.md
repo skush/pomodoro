@@ -228,3 +228,61 @@ A duration or cycle-length commit is a new kind of input that changes the timer 
 
 - [ ] Should quick-select duration presets be added alongside free-form input? Default now: free-form numeric input only. — owner: sergii.kushnir@gmail.com, due: before `design`, if reconsidered.
 - [ ] Is the accepted multi-tab non-reconciliation gap (§6.1) worth solving generally across this app's whole storage layer, rather than accepting it per-feature? Default now: same accepted gap as session-tracking, unchanged. — owner: sergii.kushnir@gmail.com, due: before a future step that adds a second write surface (e.g. cross-device sync), if one is ever added — same trigger session-tracking's own §6.1 already names for this gap.
+
+## Test plan
+
+Levels: **unit** (pure engine + validation logic, in-memory storage fake), **e2e-through-UI** (flows driven through the real rendered page in a headless browser). Integration, contract, load: N/A (no separate datastore or boundary — see below).
+
+### AC coverage
+
+| AC | Test name | Level | Expected outcome |
+|---|---|---|---|
+| AC-01 happy | valid duration commit is saved and used on next fresh start | unit + e2e-through-UI | Stored value equals the typed value; next fresh phase of that type counts down from exactly that length |
+| AC-02 error | invalid duration commit is rejected and reverts | unit + e2e-through-UI | Field shows the last valid value, nothing saved, inline message names the 1–180 range |
+| AC-03 idle update | idle phase display updates on commit | unit + e2e-through-UI | Idle countdown shows the new duration immediately, without pressing Start |
+| AC-04 invariant | running phase is untouched by a duration commit | unit + e2e-through-UI | Remaining time keeps counting down unchanged; new value applies only at the next fresh start |
+| AC-04b invariant | Reset after a mid-phase duration change shows the current configured value | unit | Idle phase after Reset shows the newly configured duration, not the one it ran with |
+| AC-05 invariant | paused phase keeps its frozen time after a duration commit | unit + e2e-through-UI | Resume continues from the same frozen remaining time |
+| AC-06 invariant | invalid stored duration falls back to the classic default and is written back | unit | Focus 25 / Short 5 / Long 15 used and saved; no instant or sub-minimum completion; no exception |
+| AC-07 cross-context | committing a setting leaves cycle position and daily count alone | unit | In-cycle focus count and today's completed count identical before and after any duration or cycle-length commit |
+| AC-08 authorization | outside writes to the four settings are ignored as a trigger and overwritten next time | unit + e2e-through-UI | A foreign write triggers no engine logic; the next legitimate write saves all four in-memory settings, replacing the foreign value; count, date, and label keys stay writable only by their own triggers |
+| AC-09 happy | reload pre-fills each duration field with the value in effect | unit + e2e-through-UI | Fields show last-committed values, or the classic defaults where none is valid |
+| AC-10 happy | valid cycle-length commit is saved and governs later Long-break decisions | unit + e2e-through-UI | Stored value equals the typed value; the next Long-break decision uses it |
+| AC-11 error | invalid cycle-length commit is rejected and reverts | unit + e2e-through-UI | Field shows the last valid value, nothing saved, inline message names the 2–8 range |
+| AC-12 invariant | invalid stored cycle length falls back to 4 and is written back | unit | Cycle length 4 used and saved; no exception |
+| AC-13 cross-context | mid-cycle cycle-length change is decided on the next Focus completion | unit | The commit alone triggers no Long break and leaves the in-cycle count unchanged; the next natural Focus completion takes a Long break if the count has reached or passed the new length, otherwise a Short break |
+| AC-14 happy | reload pre-fills the cycle-length field with the value in effect | unit + e2e-through-UI | Field shows the last-committed value, or 4 if none is valid |
+
+### Edge cases / error paths
+
+Each row also has its own dedicated test; none is folded into a happy path.
+
+- Duration of 0, 181, or a negative number → rejected, reverts to the last valid value, inline range message.
+- Duration of `1` and `180` (boundaries) → accepted and honored.
+- Duration of `12.5`, `25abc`, `1e2`, empty, or whitespace → rejected as not a whole number (same outcome as out of range).
+- Cycle length of 1, 9, `4.5`, or empty → rejected; cycle length of 2 and 8 → accepted.
+- Stored duration missing, `"0"`, `"NaN"`, `"-5"`, or `"500"` → classic default used and written back; a phase started from it never completes instantly.
+- Stored value corrupted between page load and the next fresh start → corrected before that start (pre-start correction).
+- Storage unavailable or throwing on read or write → fail-soft: classic defaults are used, no exception reaches the User.
+- Duration commit while running, while paused, and while idle (three separate rows) → remaining time unchanged, unchanged, updated respectively.
+- Cycle-length change lowered below the current in-cycle count (e.g. count 3, length 2) → next Focus completion is followed by a Long break; the count is not retroactively altered.
+- 100:00 → 99:59 countdown crossing → the fixed-width countdown area does not shift neighboring controls (visual assertion in the e2e-through-UI run, plus the manual check in §6).
+- Blur or Enter commits; an intermediate keystroke never applies to display, storage, or engine.
+
+### Test data
+
+- Seed strategy: an in-memory storage fake pre-populated per case with valid, missing, and corrupted values for the three duration keys and the cycle-length key, plus the existing count, date, and label keys for AC-07/AC-08. For e2e-through-UI, the page's storage is seeded before load.
+- Integration dependency: N/A. The only datastore is the browser's own key-value storage, faked in memory at unit level and used for real by the e2e-through-UI run in a real headless browser, so nothing is mocked in the flows that matter end to end.
+- Cleanup boundary: per-test. A fresh fake storage and a fresh engine per unit test; a fresh browser context per e2e-through-UI test.
+- Note: the automated e2e-through-UI level needs a headless-browser driver as a dev-only dependency, which the repo does not have today. `tasks` and `implement` must add it as an explicit task. It must not enter the shipped `index.html`.
+
+### NFR validation (load)
+
+<!-- N/A: no numeric NFR -->
+
+The numeric bounds in §6 (1–180 and 2–8) are correctness limits covered by the unit tests above, not throughput or latency targets.
+
+### CI placement
+
+- On every PR: unit.
+- Pre-release / on schedule: e2e-through-UI, plus the §6 manual checks (close/reopen persistence, Network tab shows zero extra requests, live 100→99 width crossing).
