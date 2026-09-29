@@ -83,38 +83,56 @@ User configures.
 
 ## 3. Context and scope
 
-<!-- 🎯 Why: draws the SYSTEM BOUNDARY — who talks to it from outside, where the trust zone ends.
-     Without §3, §5 and §8 (authorization) blur — unclear what's «inside» vs «outside».
-     📋 Write: 2–3 sentences of business context + an external-systems table + a C4Context block.
-     📌 «External: none (deliberate, no third-party in v1)» is itself a decision worth stating.
-     Trust boundary — the line past which you don't trust data without checking it.
-     Never N/A — greenfield still draws the planned actors + external systems. -->
+adjustable-durations extends the single-page Pomodoro app: a User opens `index.html`, and in addition
+to running Focus/break phases and tracking a task label + daily count, can now type custom durations
+for each phase type and a custom cycle length. No new external actor — the same User, the same
+Browser runtime core-timer/session-tracking already declared.
 
-<Business context in 2–3 sentences. What the system does for whom.>
-
-<!-- brownfield: <one-line scan summary> (or «N/A — greenfield repo» if no source existed) -->
+<!-- brownfield: reflects a fresh explorer scan (2026-09-29) of current HEAD (aac9da7), not
+     docs/architecture-map.md (stale — see §2 Conventions). Current state: src/logic/index.js
+     (220 lines: createTimerEngine — the one stateful factory returning frozen {start, pause,
+     reset, getSnapshot} — plus PHASES, controlStates, formatDuration from core-timer, and
+     localDateString/shouldRollover/validateLabelInput/validateStoredCount/validateStoredDate/
+     validateStoredLabel/applyCountUpdate from session-tracking, all pure; private
+     FOCUS_DURATION_MS/SHORT_BREAK_DURATION_MS/LONG_BREAK_DURATION_MS/FOCUS_SESSIONS_PER_CYCLE
+     module constants and private durationFor()/clampRemaining() helpers — this is where the
+     hardcoded 25/5/15/4 this feature must make configurable currently live); src/ui/index.js
+     (252 lines: mount(root, engine) — the only DOM/browser-API site — plus persistState(storage,
+     state), the single write-gatekeeper function (ADR-0002, session-tracking), and
+     readPersistedState(storage); current keys session-tracking:count/date/label); src/main.js
+     (4 lines, unchanged: mount(document.getElementById('app'), createTimerEngine())). No
+     adjustable-durations code exists yet — this feature is purely additive to both modules. -->
 
 **External systems (in / out):**
 
 | Actor or system | Type | Interaction |
 |---|---|---|
-| <author role> | Person | <what they do> |
-| <external service> | System (internal/external) | <interaction> |
-| <identity provider> | System (external) | <provides auth tokens> |
+| User | Person | Types custom durations and a custom cycle length; reads the phase, countdown, idle-duration display, label, and today's completed-session count |
+| Browser runtime | System (external, the host) | Executes the page; exposes wall-clock time, tab-visibility state, and the Web Storage API |
 
-**C4 Context (L1):** <!-- syntax → references/c4-mermaid-syntax.md. Real names, no <placeholder> stubs. -->
+No other external systems — deliberate, no backend, no third-party API, no analytics
+([`adr/0002-no-backend-for-v1`](../../adr/0002-no-backend-for-v1.md)), unchanged from
+core-timer/session-tracking.
+
+**C4 Context (L1):**
 
 ```mermaid
 C4Context
-    title <feature> — System Context
+    title adjustable-durations — System Context
 
-    Person(actor, "<Actor role>", "<intent>")
-    System(app, "<Our system>", "<one-sentence description>")
-    System_Ext(ext, "<External system>", "<one-sentence description>")
+    Person(user, "User", "Sets custom Focus/Short-break/Long-break durations and cycle length; runs the timer")
 
-    Rel(actor, app, "<interaction>", "<protocol>")
-    Rel(app, ext, "<interaction>", "<protocol>")
+    System(app, "Pomodoro timer (index.html)", "Single self-contained HTML/CSS/JS page — timer engine, configured durations/cycle length, task label, daily counter, UI — no server")
+    System_Ext(browser, "Browser runtime", "JS engine, DOM, Web Storage API — hosts and executes the page, persists local state")
+
+    Rel(user, app, "Types durations/cycle length, reads phase/countdown/counts", "keyboard / reads display")
+    Rel(app, browser, "Reads/writes local storage, reads wall-clock time, renders DOM", "JS APIs")
 ```
+
+The Context is unchanged in shape from core-timer's and session-tracking's — still only the User
+talking to the single self-contained page, which depends on nothing but the browser's own
+JS/DOM/Storage APIs. Nothing new crosses the system boundary: this feature adds new data the User
+types into the same page and new keys in the same local storage, not a new external dependency.
 
 ## 4. Solution strategy
 
