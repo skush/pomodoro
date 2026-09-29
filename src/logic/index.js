@@ -252,6 +252,54 @@ export function applyCountUpdate(state, now, justCompletedFocusAt) {
   return { trackedDate, count };
 }
 
+const DURATION_MIN_MINUTES = 1;
+const DURATION_MAX_MINUTES = 180;
+const CYCLE_LENGTH_MIN = 2;
+const CYCLE_LENGTH_MAX = 8;
+// Strict whole number: an optional leading '-' then digits only — rejects decimals,
+// exponents, whitespace, '+', hex and any trailing text that Number() would tolerate.
+const STRICT_WHOLE_NUMBER = /^-?\d+$/;
+
+function parseWholeNumberInRange(raw, min, max) {
+  if (typeof raw !== 'string' || !STRICT_WHOLE_NUMBER.test(raw)) return null;
+  const n = Number(raw);
+  return n >= min && n <= max ? n : null;
+}
+
+// adjustable-durations T3 (spec.md AC-02): a committed duration field's raw text →
+// {valid, value}. Whole minutes 1–180 only; anything else is rejected outright.
+export function validateDurationInput(raw) {
+  const value = parseWholeNumberInRange(raw, DURATION_MIN_MINUTES, DURATION_MAX_MINUTES);
+  return value === null ? { valid: false } : { valid: true, value };
+}
+
+// adjustable-durations T3 (spec.md AC-11): same shape for the cycle length, 2–8.
+export function validateCycleLengthInput(raw) {
+  const value = parseWholeNumberInRange(raw, CYCLE_LENGTH_MIN, CYCLE_LENGTH_MAX);
+  return value === null ? { valid: false } : { valid: true, value };
+}
+
+function storedToText(raw) {
+  return typeof raw === 'number' && Number.isInteger(raw) ? String(raw) : raw;
+}
+
+// adjustable-durations T3 (spec.md AC-06, §6 NFR): pure per-field fallback, mirroring
+// validateStoredCount — a missing/malformed/out-of-range stored value becomes that
+// phase type's classic default, so no stored value can yield a phase shorter than
+// its own valid minimum (or an instant completion). `phaseKey` is
+// 'focus' | 'shortBreak' | 'longBreak'; an unknown key falls back to Focus's default.
+export function validateStoredDuration(raw, phaseKey) {
+  const value = parseWholeNumberInRange(storedToText(raw), DURATION_MIN_MINUTES, DURATION_MAX_MINUTES);
+  if (value !== null) return value;
+  return DEFAULT_DURATIONS_MIN[phaseKey] ?? DEFAULT_DURATIONS_MIN.focus;
+}
+
+// adjustable-durations T3 (spec.md AC-12): stored cycle length, fallback 4.
+export function validateStoredCycleLength(raw) {
+  const value = parseWholeNumberInRange(storedToText(raw), CYCLE_LENGTH_MIN, CYCLE_LENGTH_MAX);
+  return value === null ? DEFAULT_CYCLE_LENGTH : value;
+}
+
 // Pure display formatting (spec §6 NFR): remaining time is always rounded UP to
 // the next whole second so the full duration shows immediately and never skips
 // to one second less.
