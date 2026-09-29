@@ -8,6 +8,7 @@ import {
   validateStoredCount,
   validateStoredDate,
   validateStoredLabel,
+  applyCountUpdate,
 } from '../../src/logic/index.js';
 
 const FOCUS_MS = 25 * 60 * 1000;
@@ -143,6 +144,15 @@ describe('validateStoredDate (session-tracking T3, §6 NFR "Corrupted or missing
     assert.equal(validateStoredDate(12345), null);
     assert.equal(validateStoredDate(''), null);
   });
+
+  // review fix (CHANGES REQUESTED, stage-2): a calendar-impossible value that
+  // still matches the YYYY-MM-DD *format* (e.g. month 13, day 45) must also
+  // fall back to null — JS Date silently rolls it over, which would otherwise
+  // freeze the counter until the rolled-over date is reached for real.
+  test('a format-matching but calendar-impossible value falls back to null', () => {
+    assert.equal(validateStoredDate('2026-13-45'), null);
+    assert.equal(validateStoredDate('2026-02-30'), null);
+  });
 });
 
 describe('validateStoredLabel (session-tracking T3, §6 NFR "Corrupted or missing persisted state")', () => {
@@ -156,11 +166,94 @@ describe('validateStoredLabel (session-tracking T3, §6 NFR "Corrupted or missin
     assert.equal(validateStoredLabel(42), '');
     assert.equal(validateStoredLabel({}), '');
   });
+
+  // review fix (CHANGES REQUESTED, AC-02): a stored label over the 100-char
+  // limit (written externally, e.g. via devtools or another tab) must fall back
+  // to empty, not load as-is — AC-02 requires the field to never exceed 100
+  // characters, and an over-limit value loaded as-is could never be edited down
+  // one character at a time (every edit still exceeds the limit).
+  test('a stored value over 100 characters falls back to empty string', () => {
+    assert.equal(validateStoredLabel('a'.repeat(101)), '');
+  });
+
+  test('a stored value at exactly 100 characters passes through', () => {
+    const atLimit = 'a'.repeat(100);
+    assert.equal(validateStoredLabel(atLimit), atLimit);
+  });
+});
+
+// review fix (CHANGES REQUESTED, T6 DoD): applyCountUpdate is the SAME function
+// src/ui/index.js's updateSessionCount() calls — these tests exercise the real
+// wiring's decision logic directly, not a copy of it. >=5 required
+// midnight-boundary cases per spec.md §6 NFR "Daily reset correctness", plus a
+// backward-clock-with-completion case and the AC-05 null-latch case.
+describe('applyCountUpdate (session-tracking T6, AC-04/AC-04b/AC-05/AC-06/AC-06b)', () => {
+  test('exactly-at-midnight: rolls over and does not credit (no completion)', () => {
+    const stored = localDateString(new Date(2026, 8, 27, 23, 59, 59).getTime());
+    const now = new Date(2026, 8, 28, 0, 0, 0).getTime();
+    const result = applyCountUpdate({ trackedDate: stored, count: 3 }, now, null);
+    assert.deepEqual(result, { trackedDate: localDateString(now), count: 0 });
+  });
+
+  test('mid-sleep crossing, with a genuine new-day completion: rolls over and credits', () => {
+    const stored = localDateString(new Date(2026, 8, 27, 22, 0, 0).getTime());
+    const now = new Date(2026, 8, 28, 9, 0, 0).getTime();
+    const completedAt = new Date(2026, 8, 28, 8, 55, 0).getTime(); // same day as `now`
+    const result = applyCountUpdate({ trackedDate: stored, count: 5 }, now, completedAt);
+    assert.deepEqual(result, { trackedDate: localDateString(now), count: 1 });
+  });
+
+  test('long-absence crossing: rolls over, stale count reset to 0', () => {
+    const stored = localDateString(new Date(2026, 8, 20, 10, 0, 0).getTime());
+    const now = new Date(2026, 8, 28, 10, 0, 0).getTime();
+    const result = applyCountUpdate({ trackedDate: stored, count: 12 }, now, null);
+    assert.deepEqual(result, { trackedDate: localDateString(now), count: 0 });
+  });
+
+  test('true-completion-before-midnight crossing: a session that truly finished before midnight is not credited into the new day', () => {
+    const stored = localDateString(new Date(2026, 8, 28, 23, 10, 0).getTime());
+    const now = new Date(2026, 8, 29, 0, 10, 0).getTime(); // detected after midnight
+    const completedAt = new Date(2026, 8, 28, 23, 35, 0).getTime(); // truly finished before midnight
+    const result = applyCountUpdate({ trackedDate: stored, count: 2 }, now, completedAt);
+    assert.deepEqual(result, { trackedDate: localDateString(now), count: 0 }); // rolled, NOT credited
+  });
+
+  test('a session that truly finishes after midnight IS credited to the new day', () => {
+    const stored = localDateString(new Date(2026, 8, 28, 23, 50, 0).getTime());
+    const now = new Date(2026, 8, 29, 0, 16, 0).getTime();
+    const completedAt = new Date(2026, 8, 29, 0, 15, 0).getTime(); // after midnight
+    const result = applyCountUpdate({ trackedDate: stored, count: 0 }, now, completedAt);
+    assert.deepEqual(result, { trackedDate: localDateString(now), count: 1 });
+  });
+
+  test('backward clock change: never rolls backward, and a stale completion day does not credit', () => {
+    const stored = localDateString(new Date(2026, 8, 28, 10, 0, 0).getTime());
+    const now = new Date(2026, 8, 27, 10, 0, 0).getTime(); // clock/date moved back a day
+    const result = applyCountUpdate({ trackedDate: stored, count: 4 }, now, null);
+    assert.deepEqual(result, { trackedDate: stored, count: 4 }); // unchanged — no rollover, no credit
+  });
+
+  test('same tracked day, genuine completion: credits without rolling over', () => {
+    const stored = localDateString(new Date(2026, 8, 28, 1, 0, 0).getTime());
+    const now = new Date(2026, 8, 28, 23, 0, 0).getTime();
+    const completedAt = new Date(2026, 8, 28, 22, 55, 0).getTime();
+    const result = applyCountUpdate({ trackedDate: stored, count: 1 }, now, completedAt);
+    assert.deepEqual(result, { trackedDate: stored, count: 2 });
+  });
+
+  test('AC-05: a null latch (Reset/break completion) never credits, on a same tracked day', () => {
+    const stored = localDateString(new Date(2026, 8, 28, 1, 0, 0).getTime());
+    const now = new Date(2026, 8, 28, 12, 0, 0).getTime();
+    const result = applyCountUpdate({ trackedDate: stored, count: 3 }, now, null);
+    assert.deepEqual(result, { trackedDate: stored, count: 3 }); // unchanged
+  });
 });
 
 // session-tracking T7 (sad.md §11 risk, spec.md AC-06): the sleep-across-midnight
-// case end-to-end — composes T1's engine latch with T2's rollover decision
-// exactly as src/ui/index.js's updateSessionCount() does, without needing a DOM.
+// case end-to-end — composes T1's engine latch with the SAME applyCountUpdate()
+// src/ui/index.js's updateSessionCount() calls, without needing a DOM. Calling
+// applyCountUpdate directly (rather than re-deriving its steps inline) means
+// this test actually breaks if the real wiring's decision logic breaks.
 describe('sleep-across-midnight, end-to-end (session-tracking T7, AC-06)', () => {
   test('a session that truly finished before midnight is not credited into the new day', () => {
     const engine = createTimerEngine();
@@ -172,15 +265,11 @@ describe('sleep-across-midnight, end-to-end (session-tracking T7, AC-06)', () =>
     const snap = engine.getSnapshot(readAt);
     assert.equal(snap.justCompletedFocusAt, trueDeadline);
 
-    // The same two-step decision src/ui/index.js's updateSessionCount() performs:
-    let trackedDate = localDateString(start); // stored date is "yesterday"
-    if (shouldRollover(trackedDate, readAt)) {
-      trackedDate = localDateString(readAt); // Step 1: rolls forward using NOW
-    }
-    const credited = snap.justCompletedFocusAt !== null && localDateString(snap.justCompletedFocusAt) === trackedDate;
+    const trackedDate = localDateString(start); // stored date is "yesterday"
+    const result = applyCountUpdate({ trackedDate, count: 0 }, readAt, snap.justCompletedFocusAt);
 
-    assert.equal(trackedDate, localDateString(readAt)); // rolled to the new day
-    assert.equal(credited, false); // Step 2: NOT credited — the true completion was on the old day
+    assert.equal(result.trackedDate, localDateString(readAt)); // rolled to the new day
+    assert.equal(result.count, 0); // NOT credited — the true completion was on the old day
   });
 
   test('a session that truly finishes after midnight IS credited to the new day', () => {
@@ -192,12 +281,9 @@ describe('sleep-across-midnight, end-to-end (session-tracking T7, AC-06)', () =>
     const readAt = trueDeadline + 60_000; // detected a minute later
     const snap = engine.getSnapshot(readAt);
 
-    let trackedDate = localDateString(start);
-    if (shouldRollover(trackedDate, readAt)) {
-      trackedDate = localDateString(readAt);
-    }
-    const credited = snap.justCompletedFocusAt !== null && localDateString(snap.justCompletedFocusAt) === trackedDate;
+    const trackedDate = localDateString(start);
+    const result = applyCountUpdate({ trackedDate, count: 0 }, readAt, snap.justCompletedFocusAt);
 
-    assert.equal(credited, true);
+    assert.equal(result.count, 1);
   });
 });

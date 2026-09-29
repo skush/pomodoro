@@ -170,14 +170,42 @@ export function validateStoredCount(raw) {
   return n;
 }
 
+// review fix (CHANGES REQUESTED, stage-2): format-matching alone accepts
+// calendar-impossible values like '2026-13-45' — JS Date silently rolls those
+// over, so re-deriving the date string and requiring it round-trip back to
+// `raw` rejects anything the format regex alone would let through.
 export function validateStoredDate(raw) {
   if (typeof raw !== 'string' || !STORED_DATE_PATTERN.test(raw)) return null;
+  const [year, month, day] = raw.split('-').map(Number);
+  const roundTripped = localDateString(new Date(year, month - 1, day).getTime());
+  return roundTripped === raw ? raw : null;
+}
+
+// review fix (CHANGES REQUESTED, AC-02): a stored label over the 100-char limit
+// (written by devtools or another tab) must not be loaded as-is — AC-02 already
+// requires the field to never exceed 100 characters, and validateLabelInput
+// rejects any edit that would keep an already-over-limit value above the limit,
+// including Backspace. Falling back to empty (the same NFR fallback as a
+// corrupted value) keeps the field editable.
+export function validateStoredLabel(raw) {
+  if (typeof raw !== 'string' || raw.length > TASK_LABEL_MAX_LENGTH) return '';
   return raw;
 }
 
-export function validateStoredLabel(raw) {
-  if (typeof raw !== 'string') return '';
-  return raw;
+// review fix (CHANGES REQUESTED, T6 DoD): the day-rollover + completion-crediting
+// decision src/ui/index.js's updateSessionCount() used to re-implement inline.
+// Extracted here so it's the SAME code a test calls and the UI wires — a broken
+// wiring can no longer hide behind a test that merely copies the logic.
+export function applyCountUpdate(state, now, justCompletedFocusAt) {
+  let { trackedDate, count } = state;
+  if (shouldRollover(trackedDate, now)) {
+    trackedDate = localDateString(now);
+    count = 0;
+  }
+  if (justCompletedFocusAt !== null && localDateString(justCompletedFocusAt) === trackedDate) {
+    count += 1;
+  }
+  return { trackedDate, count };
 }
 
 // Pure display formatting (spec §6 NFR): remaining time is always rounded UP to

@@ -375,6 +375,17 @@ describe('justCompletedFocusAt (session-tracking T1, ADR-0001)', () => {
     assert.equal(snap.justCompletedFocusAt, FOCUS);
   });
 
+  // review fix (CHANGES REQUESTED, AC-05): resetting BEFORE the deadline passes
+  // must give no credit — distinct from the existing 'is latched ... inside
+  // reset()' case above, which resets AFTER the deadline already passed.
+  test('resetting before the deadline passes leaves the latch null — no credit (AC-05)', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.reset(FOCUS - 1000); // reset while still mid-Focus, deadline not yet passed
+    const snap = engine.getSnapshot(FOCUS + 1);
+    assert.equal(snap.justCompletedFocusAt, null);
+  });
+
   test('stays null across a Short/Long break completion (only Focus completions latch)', () => {
     const engine = createTimerEngine();
     engine.start(0);

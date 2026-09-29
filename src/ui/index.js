@@ -10,8 +10,7 @@ import {
   validateStoredDate,
   validateStoredLabel,
   validateLabelInput,
-  localDateString,
-  shouldRollover,
+  applyCountUpdate,
 } from '../logic/index.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
@@ -23,18 +22,33 @@ const LABEL_KEY = 'session-tracking:label';
 
 // session-tracking T4 (ADR-0002, AC-07): the ONLY function anywhere that may call
 // `storage.setItem` for the count/date/label keys — the write guard's single
-// choke point. Always writes exactly the given patch as a plain overwrite, never
-// a read-then-merge; a thrown storage error (quota/private-mode/disabled) is
-// swallowed so the app keeps running in-memory with nothing shown to the User
-// (spec.md §6 NFR "Storage write failure"). `storage` is injected (never the
-// bare `localStorage` global read here) so this is callable from plain Node.
-export function persistState(storage, patch) {
+// choke point. review fix (CHANGES REQUESTED, AC-07): always writes the FULL
+// {count, date, label} triple — never a partial patch — so the "overwrite,
+// never adopt" guarantee holds for every key on every legitimate write, not
+// only the keys that particular trigger happened to touch (a devtools/other-tab
+// edit to an untouched key would otherwise survive into the next read). A
+// thrown storage error (quota/private-mode/disabled) is swallowed so the app
+// keeps running in-memory with nothing shown to the User (spec.md §6 NFR
+// "Storage write failure"). `storage` is injected (never the bare `localStorage`
+// global read here) so this is callable from plain Node.
+export function persistState(storage, state) {
   try {
-    if ('count' in patch) storage.setItem(COUNT_KEY, String(patch.count));
-    if ('date' in patch) storage.setItem(DATE_KEY, patch.date);
-    if ('label' in patch) storage.setItem(LABEL_KEY, patch.label);
+    storage.setItem(COUNT_KEY, String(state.count));
+    storage.setItem(DATE_KEY, state.date);
+    storage.setItem(LABEL_KEY, state.label);
   } catch {
     // fail-soft: never throw to the User, never surface an error (spec.md §6 NFR)
+  }
+}
+
+// review fix (CHANGES REQUESTED, fail-soft): `storage.getItem` itself can throw
+// (e.g. Safari private-mode quota) even when acquiring the storage object did
+// not — caught per-field so one corrupted/blocked field never blocks the others.
+function safeGetItem(storage, key) {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
   }
 }
 
@@ -42,10 +56,22 @@ export function persistState(storage, patch) {
 // its own T3 fallback independently — a corrupted field never blocks the others.
 export function readPersistedState(storage) {
   return {
-    count: validateStoredCount(storage.getItem(COUNT_KEY)),
-    date: validateStoredDate(storage.getItem(DATE_KEY)),
-    label: validateStoredLabel(storage.getItem(LABEL_KEY)),
+    count: validateStoredCount(safeGetItem(storage, COUNT_KEY)),
+    date: validateStoredDate(safeGetItem(storage, DATE_KEY)),
+    label: validateStoredLabel(safeGetItem(storage, LABEL_KEY)),
   };
+}
+
+// review fix (CHANGES REQUESTED, fail-soft/QG-2 "storage disabled"): merely
+// *accessing* window.localStorage throws in browsers that block site storage
+// (e.g. Chrome with site data blocked) — this must never propagate out of
+// mount() and take the whole timer down with it.
+function acquireStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 const PHASE_LABELS = {
@@ -84,13 +110,25 @@ export function mount(root, engine) {
   resetBtn.type = 'button';
   resetBtn.textContent = 'Reset';
 
+  const labelFieldId = 'task-label';
+  const labelLimitMessageId = 'task-label-limit-message';
+
+  const labelFieldLabel = document.createElement('label');
+  labelFieldLabel.className = 'task-label-field-label';
+  labelFieldLabel.htmlFor = labelFieldId;
+  labelFieldLabel.textContent = 'Task label';
+
   const labelField = document.createElement('input');
   labelField.type = 'text';
+  labelField.id = labelFieldId;
   labelField.className = 'task-label';
   labelField.placeholder = LABEL_PLACEHOLDER;
+  labelField.setAttribute('aria-describedby', labelLimitMessageId);
 
   const labelLimitMessage = document.createElement('p');
+  labelLimitMessage.id = labelLimitMessageId;
   labelLimitMessage.className = 'task-label-limit-message';
+  labelLimitMessage.setAttribute('aria-live', 'polite');
   labelLimitMessage.textContent = LABEL_LIMIT_MESSAGE;
   labelLimitMessage.hidden = true;
 
@@ -98,13 +136,17 @@ export function mount(root, engine) {
   sessionCount.className = 'session-count';
 
   controls.append(startBtn, pauseBtn, resetBtn);
-  card.append(label, countdown, controls, labelField, labelLimitMessage, sessionCount);
+  card.append(label, countdown, controls, labelFieldLabel, labelField, labelLimitMessage, sessionCount);
   root.append(card);
 
-  const storage = window.localStorage;
+  const storage = acquireStorage();
   const persisted = readPersistedState(storage);
   labelField.value = persisted.label;
   let lastAcceptedLabel = persisted.label;
+  // session-tracking review fix (AC-07): the last label a write actually
+  // persisted — a rollover/credit write never re-saves live, uncommitted field
+  // text, only what commitLabel() last committed.
+  let committedLabel = persisted.label;
 
   // session-tracking T6 (spec.md AC-04/AC-04b/AC-05/AC-06/AC-06b, sad.md §6 Flow 1):
   // in-memory tracked day + count, seeded from storage and kept in sync with it
@@ -132,7 +174,8 @@ export function mount(root, engine) {
   });
 
   function commitLabel() {
-    persistState(storage, { label: labelField.value });
+    committedLabel = labelField.value;
+    persistState(storage, { count, date: trackedDate, label: committedLabel });
   }
   labelField.addEventListener('blur', commitLabel);
   labelField.addEventListener('keydown', (event) => {
@@ -144,22 +187,18 @@ export function mount(root, engine) {
 
   // session-tracking T6 (sad.md §6 «Focus completion → true-day credit» /
   // «Page load — restore label and display today's count»): runs on every read
-  // (load, interval tick, visibilitychange). Step 1 rolls the tracked day
-  // forward using the real current date only, never the completing session's
-  // own day (AC-06/AC-06b). Step 2 credits this specific completion only if its
-  // true day matches the (possibly just-rolled) tracked day (AC-04) — a session
-  // that truly finished before midnight is not credited into the new day
-  // (AC-06). Reset/Short/Long-break completions never reach this at all:
+  // (load, interval tick, visibilitychange). review fix (CHANGES REQUESTED, T6
+  // DoD): the rollover-then-credit decision itself now lives in the pure,
+  // directly-tested applyCountUpdate() — this is a thin caller, not a
+  // reimplementation, so a test calling applyCountUpdate proves this wiring too.
+  // Reset/Short/Long-break completions never reach a credit at all:
   // `justCompletedFocusAt` is null for those transitions (AC-05).
   function updateSessionCount(now, justCompletedFocusAt) {
-    if (shouldRollover(trackedDate, now)) {
-      trackedDate = localDateString(now);
-      count = 0;
-      persistState(storage, { count, date: trackedDate });
-    }
-    if (justCompletedFocusAt !== null && localDateString(justCompletedFocusAt) === trackedDate) {
-      count += 1;
-      persistState(storage, { count });
+    const next = applyCountUpdate({ trackedDate, count }, now, justCompletedFocusAt);
+    if (next.trackedDate !== trackedDate || next.count !== count) {
+      trackedDate = next.trackedDate;
+      count = next.count;
+      persistState(storage, { count, date: trackedDate, label: committedLabel });
     }
     sessionCount.textContent = sessionCountText(count);
   }
