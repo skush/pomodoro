@@ -11,6 +11,8 @@ import {
   validateStoredLabel,
   validateLabelInput,
   applyCountUpdate,
+  validateStoredDuration,
+  validateStoredCycleLength,
 } from '../logic/index.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
@@ -19,6 +21,11 @@ const LABEL_LIMIT_MESSAGE = 'Task label is limited to 100 characters.';
 const COUNT_KEY = 'session-tracking:count';
 const DATE_KEY = 'session-tracking:date';
 const LABEL_KEY = 'session-tracking:label';
+
+const FOCUS_DURATION_KEY = 'adjustable-durations:focus-duration';
+const SHORT_BREAK_DURATION_KEY = 'adjustable-durations:short-break-duration';
+const LONG_BREAK_DURATION_KEY = 'adjustable-durations:long-break-duration';
+const CYCLE_LENGTH_KEY = 'adjustable-durations:cycle-length';
 
 // session-tracking T4 (ADR-0002, AC-07): the ONLY function anywhere that may call
 // `storage.setItem` for the count/date/label keys — the write guard's single
@@ -72,6 +79,49 @@ function acquireStorage() {
   } catch {
     return null;
   }
+}
+
+// adjustable-durations T4 (ADR-0002, spec.md AC-08): the SECOND storage gatekeeper —
+// the only function that may call `storage.setItem` for the four adjustable-durations
+// keys, alongside (never widening) persistState's count/date/label guard. Always
+// writes the FULL {focus, shortBreak, longBreak, cycleLength} state (minutes / count),
+// so a foreign edit to any of the four keys is overwritten, never adopted, by the
+// next legitimate write. Fail-soft like persistState: a throwing (or absent) storage
+// is swallowed and the app keeps running on its in-memory state.
+export function persistDurationConfig(storage, config) {
+  try {
+    storage.setItem(FOCUS_DURATION_KEY, String(config.focus));
+    storage.setItem(SHORT_BREAK_DURATION_KEY, String(config.shortBreak));
+    storage.setItem(LONG_BREAK_DURATION_KEY, String(config.longBreak));
+    storage.setItem(CYCLE_LENGTH_KEY, String(config.cycleLength));
+  } catch {
+    // fail-soft: never throw to the User, never surface an error
+  }
+}
+
+// adjustable-durations T4 (spec.md AC-06/AC-12): reads all four values, each through
+// its own stored-value validator so one bad key never blocks the others. If any
+// stored value was missing or invalid (i.e. the validated value is not what was
+// stored), the corrected full state is written straight back via
+// persistDurationConfig. Never throws, including for a null/throwing storage.
+export function readPersistedDurationConfig(storage) {
+  const rawFocus = safeGetItem(storage, FOCUS_DURATION_KEY);
+  const rawShort = safeGetItem(storage, SHORT_BREAK_DURATION_KEY);
+  const rawLong = safeGetItem(storage, LONG_BREAK_DURATION_KEY);
+  const rawCycle = safeGetItem(storage, CYCLE_LENGTH_KEY);
+  const config = {
+    focus: validateStoredDuration(rawFocus, 'focus'),
+    shortBreak: validateStoredDuration(rawShort, 'shortBreak'),
+    longBreak: validateStoredDuration(rawLong, 'longBreak'),
+    cycleLength: validateStoredCycleLength(rawCycle),
+  };
+  const needsCorrection =
+    String(config.focus) !== rawFocus ||
+    String(config.shortBreak) !== rawShort ||
+    String(config.longBreak) !== rawLong ||
+    String(config.cycleLength) !== rawCycle;
+  if (needsCorrection) persistDurationConfig(storage, config);
+  return config;
 }
 
 const PHASE_LABELS = {
