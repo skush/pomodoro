@@ -166,6 +166,46 @@
         "index.html"
       ],
       "file": "docs/features/adjustable-durations/tasks/build-and-manual-verification.md"
+    },
+    {
+      "id": "T10",
+      "title": "Add a dev-only headless-browser harness for e2e-through-UI tests",
+      "layer": "tests",
+      "deps": [],
+      "acs": [],
+      "dod": "`npm run test:e2e` runs a smoke test green against the built index.html, `npm test` does not execute it, and the driver is a devDependency only.",
+      "files_hint": [
+        "package.json",
+        "package-lock.json",
+        "test-e2e/"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/e2e-ui-harness.md"
+    },
+    {
+      "id": "T11",
+      "title": "Write the e2e-through-UI tests for duration and cycle-length flows",
+      "layer": "tests",
+      "deps": [
+        "T9",
+        "T10"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-14"
+      ],
+      "dod": "`npm run test:e2e` passes against the freshly built index.html with a named test for each listed AC, including running/paused isolation, reload pre-fill and the write guard.",
+      "files_hint": [
+        "test-e2e/"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/e2e-ui-tests.md"
     }
   ]
 }

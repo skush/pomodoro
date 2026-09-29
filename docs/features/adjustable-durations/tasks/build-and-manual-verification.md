@@ -3,7 +3,7 @@ id: T9
 title: "Rebuild index.html and run the manual NFR checks"
 layer: "wiring"
 deps: ["T7","T8"]
-blocks: []
+blocks: ["T11"]
 acs: []
 files_hint: ["index.html"]
 owner: "sergii.kushnir@gmail.com"
@@ -18,7 +18,7 @@ status: "todo"
 
 ## Place in the sequence
 
-- **Blocked by:** T7 — Wire load-time and pre-start correction of stored durations and cycle length, T8 — Reserve fixed width for a 3-digit minute countdown so no control shifts · **Blocks:** — · **Wave:** 6.
+- **Blocked by:** T7 — Wire load-time and pre-start correction of stored durations and cycle length, T8 — Reserve fixed width for a 3-digit minute countdown so no control shifts · **Blocks:** T11 — Write the e2e-through-UI tests · **Wave:** 6.
 - **Lane:** own lane (`index.html` only) — last task.
 
 ## Why (user story)

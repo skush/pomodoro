@@ -14,5 +14,7 @@
 | T7 | Wire load-time and pre-start correction of stored durations and cycle length | ui | sergii.kushnir@gmail.com | S | T5, T6 | todo |
 | T8 | Reserve fixed width for a 3-digit minute countdown so no control shifts | ui | sergii.kushnir@gmail.com | S | T5 | todo |
 | T9 | Rebuild index.html and run the manual NFR checks | wiring | sergii.kushnir@gmail.com | S | T7, T8 | todo |
+| T10 | Add a dev-only headless-browser harness for e2e-through-UI tests | tests | sergii.kushnir@gmail.com | S | — | todo |
+| T11 | Write the e2e-through-UI tests for duration and cycle-length flows | tests | sergii.kushnir@gmail.com | M | T9, T10 | todo |
 
-**Total:** 9 tasks, ~5 person-days.
+**Total:** 11 tasks, ~6.5 person-days.

@@ -24,6 +24,8 @@ flowchart LR
     T7[T7 ui]
     T8[T8 ui]
     T9[T9 wiring]
+    T10[T10 tests]
+    T11[T11 tests]
     T1 --> T2
     T3 --> T4
     T1 --> T5
@@ -38,9 +40,11 @@ flowchart LR
     T5 --> T8
     T7 --> T9
     T8 --> T9
+    T9 --> T11
+    T10 --> T11
 ```
 
-T1/T2/T3 share `src/logic/index.js` and T4–T7 share `src/ui/index.js`, so each group runs serialized; the two groups run in parallel with each other.
+T1/T2/T3 share `src/logic/index.js` and T4–T7 share `src/ui/index.js`, so each group runs serialized; the two groups run in parallel with each other. T10 (e2e harness, `package.json` + `test-e2e/`) has no overlap and can start at once; T11 runs last against the built `index.html`.
 
 ## Tasks
 
@@ -57,6 +61,8 @@ See [tracker.md](./tracker.md) for status. Machine contract: [tasks.json](../tas
 | T7 | Wire load-time and pre-start correction of stored durations and cycle length | ui | T5, T6 | A test with invalid stored values set between load and start shows the phase runs its classic default, the correction is written back, and 0 exceptions or instant completions occur. |
 | T8 | Reserve fixed width for a 3-digit minute countdown so no control shifts | ui | T5 | Manual check across 1–180 minutes, observed live through a 100→99 minute crossing, shows no control shifts position. |
 | T9 | Rebuild index.html and run the manual NFR checks | wiring | T7, T8 | `npm run build` regenerates index.html committed alongside src/, and the manual persistence, commit-discipline, network and width checks pass. |
+| T10 | Add a dev-only headless-browser harness for e2e-through-UI tests | tests | — | `npm run test:e2e` runs a smoke test green against the built index.html, `npm test` does not execute it, and the driver is a devDependency only. |
+| T11 | Write the e2e-through-UI tests for duration and cycle-length flows | tests | T9, T10 | `npm run test:e2e` passes against the freshly built index.html with a named test for each listed AC, including running/paused isolation, reload pre-fill and the write guard. |
 
 ## Risks / Hard rules
 
