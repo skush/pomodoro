@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
@@ -353,16 +353,19 @@ describe('syncConfigFromStorage (adjustable-durations T5/T7)', () => {
 });
 
 // adjustable-durations T7 (ADR-0002, spec.md AC-06/AC-08/AC-12): persistDurationConfig
-// may be called only by its three legitimate triggers, and the pre-start correction
-// must run before every Start.
+// may be called only from its three legitimate trigger paths — the two commits and the
+// load-time/pre-start correction (readPersistedDurationConfig's write-back, and
+// prepareStart's retry of a failed save, re-review fix #1) — and the pre-start
+// correction must run before every Start.
 describe('duration write-guard call sites (adjustable-durations T7)', () => {
   const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src');
-  const uiContents = readFileSync(path.join(srcDir, 'ui/index.js'), 'utf8');
+  // Line comments blanked so a comment naming a helper is not counted as a call.
+  const uiContents = readFileSync(path.join(srcDir, 'ui/index.js'), 'utf8').replace(/\/\/.*$/gm, '');
 
-  test('persistDurationConfig is called only from commitDuration, commitCycleLength and readPersistedDurationConfig', () => {
+  test('persistDurationConfig is called only from commitDuration, commitCycleLength, readPersistedDurationConfig and prepareStart', () => {
     const callSites = (uiContents.match(/\bpersistDurationConfig\(/g) || []).length - 1; // minus the declaration
-    assert.equal(callSites, 3);
-    for (const trigger of ['commitDuration', 'commitCycleLength', 'readPersistedDurationConfig']) {
+    assert.equal(callSites, 4);
+    for (const trigger of ['commitDuration', 'commitCycleLength', 'readPersistedDurationConfig', 'prepareStart']) {
       const from = uiContents.indexOf('function ' + trigger);
       assert.notEqual(from, -1, trigger + ' not found');
       const next = uiContents.indexOf('persistDurationConfig(', from);
@@ -410,8 +413,9 @@ describe('prepareStart (adjustable-durations review fix)', () => {
     config = { ...config, focus: 50 };
     engine.setConfiguredDurations(config);
     const saved = persistDurationConfig(throwingStorage, config);
-    config = prepareStart(throwingStorage, engine, config, engine.getSnapshot(0), saved);
-    assert.equal(config.focus, 50);
+    const result = prepareStart(throwingStorage, engine, config, engine.getSnapshot(0), saved);
+    assert.equal(result.config.focus, 50);
+    assert.equal(result.lastWriteOk, false);
     engine.start(0);
     assert.equal(engine.getSnapshot(1000).remainingMs, 50 * MIN - 1000);
   });
@@ -420,7 +424,7 @@ describe('prepareStart (adjustable-durations review fix)', () => {
     const engine = createTimerEngine();
     const config = { focus: 40, shortBreak: 5, longBreak: 15, cycleLength: 4 };
     engine.setConfiguredDurations(config);
-    assert.deepEqual(prepareStart(null, engine, config, engine.getSnapshot(0), true), config);
+    assert.deepEqual(prepareStart(null, engine, config, engine.getSnapshot(0), true), { config, lastWriteOk: true });
     engine.start(0);
     assert.equal(engine.getSnapshot(0).remainingMs, 40 * MIN);
   });
@@ -435,7 +439,7 @@ describe('prepareStart (adjustable-durations review fix)', () => {
     storage.setItem('adjustable-durations:cycle-length', 'junk'); // foreign, invalid
     storage.writes.length = 0;
     const next = prepareStart(storage, engine, config, engine.getSnapshot(7 * MIN), true);
-    assert.deepEqual(next, config);
+    assert.deepEqual(next, { config, lastWriteOk: true });
     assert.deepEqual(storage.writes, []);
   });
 
@@ -445,8 +449,75 @@ describe('prepareStart (adjustable-durations review fix)', () => {
     const config = syncConfigFromStorage(storage, engine);
     storage.setItem('adjustable-durations:focus-duration', '0');
     const next = prepareStart(storage, engine, config, engine.getSnapshot(0), true);
-    assert.equal(next.focus, 25);
+    assert.equal(next.config.focus, 25);
+    assert.equal(next.lastWriteOk, true);
     assert.equal(storage.getItem('adjustable-durations:focus-duration'), '25');
+  });
+
+  // re-review fix #1: a failed save is retried once per fresh Start — never on Resume,
+  // never in the background — so a transient failure neither loses the commit on
+  // reload nor switches the pre-start correction off for the rest of the session.
+  // Storage whose writes fail while `failing` is true (a transient quota error).
+  function flakyStorage() {
+    const inner = recordingStorage();
+    return {
+      ...inner,
+      failing: true,
+      setItem(key, value) {
+        if (this.failing) throw new Error('quota exceeded');
+        inner.setItem(key, value);
+      },
+    };
+  }
+
+  test('storage recovered: the fresh Start retries once, saves the in-memory config, and clears the failed state', () => {
+    const storage = flakyStorage();
+    const engine = createTimerEngine();
+    const config = { focus: 50, shortBreak: 5, longBreak: 15, cycleLength: 4 };
+    engine.setConfiguredDurations(config);
+    const saved = persistDurationConfig(storage, config); // fails
+    assert.equal(saved, false);
+    storage.failing = false; // storage recovers
+    const next = prepareStart(storage, engine, config, engine.getSnapshot(0), saved);
+    assert.deepEqual(next, { config, lastWriteOk: true });
+    assert.equal(storage.getItem('adjustable-durations:focus-duration'), '50');
+    assert.deepEqual([...storage.writes].sort(), DURATION_KEYS); // one full four-key write
+    engine.start(0);
+    assert.equal(engine.getSnapshot(0).remainingMs, 50 * MIN);
+  });
+
+  test('storage still failing: one attempt per fresh Start, in-memory config kept, no exception', () => {
+    const storage = flakyStorage();
+    const engine = createTimerEngine();
+    const config = { focus: 50, shortBreak: 5, longBreak: 15, cycleLength: 4 };
+    engine.setConfiguredDurations(config);
+    let attempts = 0;
+    const counting = {
+      ...storage,
+      setItem(key, value) {
+        if (key === 'adjustable-durations:focus-duration') attempts += 1;
+        return storage.setItem(key, value);
+      },
+    };
+    let result;
+    assert.doesNotThrow(() => {
+      result = prepareStart(counting, engine, config, engine.getSnapshot(0), false);
+    });
+    assert.deepEqual(result, { config, lastWriteOk: false });
+    assert.equal(attempts, 1);
+  });
+
+  test('no retry on Resume, and none when storage is unavailable', () => {
+    const storage = flakyStorage();
+    storage.failing = false;
+    const engine = createTimerEngine();
+    const config = { focus: 25, shortBreak: 5, longBreak: 15, cycleLength: 4 };
+    engine.start(0);
+    engine.pause(MIN);
+    assert.deepEqual(prepareStart(storage, engine, config, engine.getSnapshot(MIN), false), { config, lastWriteOk: false });
+    assert.deepEqual(storage.writes, []);
+    const idle = createTimerEngine();
+    assert.deepEqual(prepareStart(null, idle, config, idle.getSnapshot(0), false), { config, lastWriteOk: false });
   });
 });
 
@@ -458,7 +529,18 @@ describe('duration write-guard reader call sites (adjustable-durations review fi
   // mistaken for a call site.
   const stripComments = (text) => text.replace(/\/\/.*$/gm, '');
   const uiContents = stripComments(readFileSync(path.join(srcDir, 'ui/index.js'), 'utf8'));
-  const otherSrc = ['logic/index.js', 'main.js'].map((f) => stripComments(readFileSync(path.join(srcDir, f), 'utf8')));
+  // Every src/ module other than ui/index.js, found recursively — a new module that
+  // imported and called a helper would otherwise go unscanned (re-review fix #3).
+  const otherSrc = [];
+  (function collect(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) collect(full);
+      else if (entry.name.endsWith('.js') && full !== path.join(srcDir, 'ui', 'index.js')) {
+        otherSrc.push(stripComments(readFileSync(full, 'utf8')));
+      }
+    }
+  })(srcDir);
 
   // Names of the functions whose bodies contain a call to name + '('.
   function callersOf(name) {
@@ -487,9 +569,21 @@ describe('duration write-guard reader call sites (adjustable-durations review fi
     assert.deepEqual(callersOf('prepareStart'), ['refreshConfigFromStorage']);
   });
 
+  test('refreshConfigFromStorage (the pre-start correction) is called exactly once, from the Start click handler', () => {
+    const calls = (uiContents.match(/\brefreshConfigFromStorage\(\)/g) || []).length - 1; // minus the declaration
+    assert.equal(calls, 1, 'the pre-start correction must have exactly one trigger');
+    const handler = uiContents.match(/startBtn\.addEventListener\('click', \(\) => \{([\s\S]*?)\n {2}\}\);/);
+    assert.notEqual(handler, null, 'Start click handler not found');
+    assert.equal(handler[1].includes('refreshConfigFromStorage()'), true);
+  });
+
   test('no other src/ module calls the duration read/write helpers', () => {
+    assert.equal(otherSrc.length >= 2, true, 'expected to scan at least logic/index.js and main.js');
     for (const text of otherSrc) {
-      assert.equal(/\b(readPersistedDurationConfig|syncConfigFromStorage|persistDurationConfig|prepareStart)\(/.test(text), false);
+      assert.equal(
+        /\b(readPersistedDurationConfig|syncConfigFromStorage|persistDurationConfig|prepareStart|refreshConfigFromStorage)\(/.test(text),
+        false,
+      );
     }
   });
 });

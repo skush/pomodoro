@@ -244,7 +244,13 @@ src/
 │                   readPersistedState — run at mount, AND re-run as a pre-start correction
 │                   check right before any phase type starts fresh (AC-06/AC-12), each field
 │                   validated independently; an invalid value found at either read point is
-│                   corrected and written back via persistDurationConfig immediately.>
+│                   corrected and written back via persistDurationConfig immediately.
+│                   The pre-start check (prepareStart) is skipped on Resume (snapshot.idle
+│                   false — not a fresh start) and when storage is unavailable; if the
+│                   last save failed, it first retries that save once (one attempt per
+│                   fresh Start, full four-value state) and only reads storage once the
+│                   save succeeds — otherwise the unsaved in-memory commit stands (review
+│                   2026-09-29, ADR-0002 Amendment).>
 └── main.js        <unchanged: mount(document.getElementById('app'), createTimerEngine())>
 ```
 
@@ -329,7 +335,11 @@ sequenceDiagram
     participant Storage as Local storage
     participant Engine as Timer engine
 
-    Note over UI: page loads, or a phase type is about to start fresh
+    Note over UI: page loads, or a phase type is about to start fresh (not on Resume)
+    opt pre-start only - the last save failed
+        UI->>Storage: persistDurationConfig(storage, {full in-memory state}) - one retry
+        Note over UI: still failing - skip the read below, the unsaved in-memory values stand
+    end
     UI->>Storage: read stored adjustable-durations:* keys
     Storage-->>UI: raw values (possibly missing, malformed, or out of range)
     UI->>UI: validateStoredDuration(raw) / validateStoredCycleLength(raw), per key

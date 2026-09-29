@@ -287,11 +287,14 @@ test('NFR persistence (AC-09/AC-14): committed durations and cycle length surviv
   const profile = mkdtempSync(path.join(tmpdir(), 'pomodoro-e2e-'));
   try {
     const first = await launchPersistent(profile);
-    await first.commit(first.focusField(), '50');
-    await first.commit(first.shortBreakField(), '10');
-    await first.commit(first.longBreakField(), '20');
-    await first.commit(first.cycleLengthField(), '6');
-    await first.context.close(); // the whole browser process exits
+    try {
+      await first.commit(first.focusField(), '50');
+      await first.commit(first.shortBreakField(), '10');
+      await first.commit(first.longBreakField(), '20');
+      await first.commit(first.cycleLengthField(), '6');
+    } finally {
+      await first.context.close(); // the whole browser process exits — even if a commit failed
+    }
 
     const second = await launchPersistent(profile);
     try {

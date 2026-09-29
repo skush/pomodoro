@@ -110,6 +110,29 @@ extends.
 - If a future feature adds a fifth runtime-configurable setting related to durations/cycle length, it
   plugs into this same centralized function rather than requiring a new independent call site.
 
+## Amendment (2026-09-29, from review)
+
+Raised by the independent review and re-review (`_review/review-2026-09-29.md`). The chosen option is
+unchanged; this pins down *when* the third legitimate trigger — the load-time/pre-start correction —
+reads and writes, which the Decision outcome left implicit.
+
+- **Pre-start means a fresh start only.** The check runs on a Start of an idle phase (`snapshot.idle`),
+  never on Resume of a paused phase: a Resume neither reads nor writes the four keys (AC-06 "before
+  that phase type would start fresh").
+- **Storage unavailable → skipped.** With no storage object, there is nothing to read or write; the
+  in-memory config stands.
+- **A failed save is never overwritten by storage.** `persistDurationConfig` reports whether its write
+  succeeded. After a failed commit write, storage lags what the User committed, so adopting it would
+  silently discard that commit (AC-01/AC-03). The next fresh Start first **retries the save once** —
+  one attempt per fresh Start, no loop or timer, always the full in-memory four-value state — and runs
+  the normal read-validate-correct pass only once that save succeeds. If it still fails, the in-memory
+  config stands until the next fresh Start or commit.
+- The retry is part of the pre-start correction trigger, not a fourth trigger: `persistDurationConfig`
+  is still called only from the two commit paths and the load-time/pre-start correction
+  (`readPersistedDurationConfig`'s write-back and `prepareStart`'s retry), and the structural tests in
+  `test/logic/write-guard.test.js` pin exactly those callers, plus the Start handler as the pre-start
+  correction's only trigger.
+
 ## Links
 
 - Spec: [[../spec.md]] §5 AC-06, AC-08, AC-12, §7 KPI "Duration + cycle-length round-trip persistence"

@@ -147,21 +147,26 @@ export function syncConfigFromStorage(storage, engine) {
   return config;
 }
 
-// adjustable-durations T7 + review fixes #1/#3 (spec.md AC-01/AC-03/AC-06/AC-08): what
-// the Start handler does before starting. Returns the config now in effect.
+// adjustable-durations T7 + review fixes (spec.md AC-01/AC-03/AC-06/AC-08): what the
+// Start handler does before starting. Returns { config, lastWriteOk } — the config now
+// in effect and whether storage now matches it.
 // - Resume (the phase is paused, not idle) is not a fresh start: nothing is read or
 //   written, the in-memory config stands.
-// - If storage is unavailable or the last commit could not be saved, storage no
-//   longer reflects what the User committed — adopting it would silently discard
-//   that commit, so the in-memory config stands.
-// - Otherwise this is the pre-start correction: the same read-validate-correct path
-//   mount() uses.
+// - Storage unavailable: nothing to read or write, the in-memory config stands.
+// - The last save failed: storage lags what the User committed, so adopting it would
+//   silently discard that commit. Retry the save ONCE (this Start only — no loop, no
+//   timer); if it still fails, the in-memory config stands until the next fresh
+//   Start or commit.
+// - Otherwise (or once the retry succeeded) this is the pre-start correction: the same
+//   read-validate-correct path mount() uses.
 // `snapshot` is the last rendered snapshot — never a fresh getSnapshot() here, which
 // would consume a pending Focus-completion credit before render() could count it.
 export function prepareStart(storage, engine, config, snapshot, lastWriteOk) {
-  if (!snapshot.idle) return config;
-  if (storage === null || !lastWriteOk) return config;
-  return syncConfigFromStorage(storage, engine);
+  if (!snapshot.idle || storage === null) return { config, lastWriteOk };
+  if (!lastWriteOk && !persistDurationConfig(storage, config)) {
+    return { config, lastWriteOk: false };
+  }
+  return { config: syncConfigFromStorage(storage, engine), lastWriteOk: true };
 }
 
 // adjustable-durations T5 (screens.md «Numeric setting field», sad.md §4 decision 7):
@@ -448,7 +453,7 @@ export function mount(root, engine) {
   // written back) before the phase begins; prepareStart() decides when that applies.
   // The fields then show the values now in effect.
   function refreshConfigFromStorage() {
-    config = prepareStart(storage, engine, config, lastSnapshot, lastWriteOk);
+    ({ config, lastWriteOk } = prepareStart(storage, engine, config, lastSnapshot, lastWriteOk));
     for (const { key, field } of durationFields) field.setValue(config[key]);
     cycleLengthField.setValue(config.cycleLength);
   }
