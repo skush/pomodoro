@@ -41,6 +41,8 @@ export async function openApp(browser, { storage = {} } = {}) {
   const page = await context.newPage();
   await page.clock.install({ time: START_TIME });
   await page.goto(INDEX_URL);
+  // Freeze time so only advance() moves it — no real-time flow, fully deterministic.
+  await page.clock.pauseAt(new Date(START_TIME.getTime() + 1000));
   return { context, page, ...locators(page) };
 }
 
@@ -65,8 +67,8 @@ function locators(page) {
       if (how === 'enter') await fieldLocator.press('Enter');
       else await page.locator('.timer-phase').click(); // click elsewhere → blur
     },
-    // Advances the fake clock, firing the app's render interval on the way.
-    advance: (ms) => page.clock.runFor(ms),
+    // Jumps the fake clock forward; due timers fire once at the new time (fast — no per-tick replay).
+    advance: (ms) => page.clock.fastForward(ms),
     storage: () =>
       page.evaluate(() => {
         const out = {};

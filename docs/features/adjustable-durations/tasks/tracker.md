@@ -15,6 +15,6 @@
 | T8 | Reserve fixed width for a 3-digit minute countdown so no control shifts | ui | sergii.kushnir@gmail.com | S | T5 | done |
 | T9 | Rebuild index.html and run the manual NFR checks | wiring | sergii.kushnir@gmail.com | S | T7, T8 | done |
 | T10 | Add a dev-only headless-browser harness for e2e-through-UI tests | tests | sergii.kushnir@gmail.com | S | — | done |
-| T11 | Write the e2e-through-UI tests for duration and cycle-length flows | tests | sergii.kushnir@gmail.com | M | T9, T10 | todo |
+| T11 | Write the e2e-through-UI tests for duration and cycle-length flows | tests | sergii.kushnir@gmail.com | M | T9, T10 | done |
 
 **Total:** 11 tasks, ~6.5 person-days.
