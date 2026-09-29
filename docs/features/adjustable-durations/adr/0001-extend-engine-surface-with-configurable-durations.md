@@ -113,6 +113,39 @@ benefit over Option 1.
 - If a future feature needs another runtime-configurable engine setting, it extends this same
   pattern (a new setter on the frozen object) rather than reopening this decision.
 
+## Amendment (2026-09-29)
+
+A gap surfaced by the `design` critic pass, corrected here rather than reopening the decision above:
+
+- **The engine has no dedicated `paused` boolean — idle and paused both read as `running === false`.**
+  The Decision outcome above said "the engine has direct, private access to `remainingMs`/
+  `deadlineAt`/`running`/`focusCount`, so it alone can correctly decide 'update now' vs 'defer to next
+  fresh start'" without stating *how* it tells idle from paused, since both currently share the same
+  `running === false` state. The corrected rule: **idle** means the phase type has never been started
+  since its last reset (equivalently: `remainingMs` still equals the full duration that was in effect
+  the moment it was last reset/created — not the live current config); **paused** means
+  `remainingMs` is *less than* that captured full-duration snapshot, because some countdown already
+  happened before Pause was pressed. `setConfiguredDurations`/`setCycleLength` use exactly this
+  comparison — against the *snapshotted* value, never a live re-read of the current config — to decide
+  whether to update `remainingMs` immediately (idle) or defer to the next fresh start (paused).
+- **`clampRemaining()`/`durationFor()`'s existing contract must be corrected, not left as-is.** As
+  scanned pre-feature, both helpers read the *current* value of `durationFor(phase)` on every call,
+  including inside `pause()` and `getSnapshot()` for an already-running phase. If `durationFor()`
+  starts resolving against the newly-configurable value unmodified, lowering a phase type's Configured
+  duration while that same phase is actively running or paused would retroactively clamp its
+  in-progress `remainingMs` down to the new (possibly smaller) ceiling on the very next call — directly
+  violating AC-04/AC-05's "byte-for-byte unchanged" guarantee. The corrected contract:
+  `clampRemaining()`'s upper bound for an already-started phase must use the full duration **captured
+  at that phase's own last start/reset moment**, not a live read of the current Configured duration;
+  only a phase's *next fresh start* reads the live current value. This is a small, mechanical
+  correction to `durationFor()`'s call sites inside `pause()`/`getSnapshot()`/`reset()` (pin the value
+  read at start-time into the phase's own state, the same way `deadlineAt` is already pinned at
+  start-time per [`core-timer/adr/0001-wall-clock-deadline-timing`](../../core-timer/adr/0001-wall-clock-deadline-timing.md)),
+  not a reopening of this ADR's chosen option.
+- Both points are additionally tracked as §11 risk rows in `sad.md` and must be covered by a dedicated
+  unit test (config change while paused with a partially-elapsed `remainingMs`, distinct from the
+  idle case) before this feature's `implement` stage is considered done.
+
 ## Links
 
 - Spec: [[../spec.md]] §5 AC-03, AC-04, AC-04b, AC-05, AC-13

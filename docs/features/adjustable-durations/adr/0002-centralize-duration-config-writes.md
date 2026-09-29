@@ -67,12 +67,18 @@ against three independently-maintained inline blocks.
 
 Option 2 was considered — it costs less indirection (no jump to a separate function to see what's
 written) and mirrors core-timer's own original minimal style, which never needed a centralized writer
-at all — but AC-08's "always overwrite all four fields together" invariant would then depend on three
-humans (present or future) independently keeping three identical four-line blocks in sync, exactly
-the failure mode `session-tracking/adr/0002` already rejected this shape for. Given `spec.md`
-elevates this guarantee to its own acceptance criterion (AC-08) rather than leaving it implicit, the
-stronger, single-point guarantee was judged worth the small extra indirection, consistent with the
-precedent this decision extends.
+at all — but it is not actually a live, cost-free alternative here: `test/logic/write-guard.test.js`
+already ships a source-level scan asserting that nothing outside `persistState()` calls
+`storage.setItem` anywhere in `src/`. Any new write site for the four duration/cycle-length keys —
+whether Option 1's single function or Option 2's three inline blocks — requires extending that scan to
+permit the new caller(s); Option 2 does not avoid touching that test, it just adds three permitted
+call sites to it instead of one. With that cost equalized, AC-08's "always overwrite all four fields
+together" invariant is the deciding factor: under Option 2 it would depend on three humans (present or
+future) independently keeping three identical four-line blocks in sync, exactly the failure mode
+`session-tracking/adr/0002` already rejected this shape for. Given `spec.md` elevates this guarantee to
+its own acceptance criterion (AC-08) rather than leaving it implicit, the stronger, single-point
+guarantee was judged worth the small extra indirection, consistent with the precedent this decision
+extends.
 
 ## Consequences
 
@@ -91,6 +97,10 @@ precedent this decision extends.
   for count/date/label.
 - The three triggers must all agree on the same four-field patch shape when calling the function, a
   light coordination cost three independent call sites wouldn't have.
+- **Not zero-impact on the existing test suite** (critic finding, 2026-09-29): `persistDurationConfig`
+  did not exist when `test/logic/write-guard.test.js`'s all-of-`src/` scan was written, so that scan
+  must be extended in the same change that adds this function — this is an expected, mechanical
+  amendment tracked as a `tasks`-stage item, not a currently-passing guarantee this ADR can claim.
 
 **Neutral**
 - Two structurally similar but functionally independent gatekeeper functions now exist in

@@ -73,7 +73,15 @@ User configures.
 - Error handling: fail-soft in `src/ui/` is `CLAUDE.md`'s default (clamp, never throw) — **but** the
   duration and cycle-length fields follow the same **documented exception** session-tracking's task
   label already established: invalid commits are **rejected-with-message and revert to the last
-  valid value**, never silently clamped to the range boundary (`spec.md` AC-02/AC-11).
+  valid value on commit** (blur/Enter) — never on an intermediate keystroke, and never silently
+  clamped to the range boundary (`spec.md` AC-02/AC-11, `spec.md` §6 NFR "Commit discipline").
+- **Not zero-impact on existing tests** (critic finding, 2026-09-29): implementing ADR-0001/ADR-0002
+  requires amending two already-shipped tests, not just adding new production code —
+  `test/logic/write-guard.test.js`'s all-of-`src/` scan (currently asserts nothing outside
+  `persistState` calls `storage.setItem`; must be extended to also permit `persistDurationConfig`)
+  and `test/logic/timer-engine.test.js`'s pinned `Object.keys(engine)` assertion (currently exactly
+  `['getSnapshot','pause','reset','start']`; must include the two new methods). Both amendments are
+  mechanical and expected — tracked as a `tasks`-stage item, not a design-time blocker.
 
 **Regulatory / external.**
 - Data classification: internal — durations and cycle length are plain numeric preferences,
@@ -182,12 +190,17 @@ types into the same page and new keys in the same local storage, not a new exter
    never requires partially recovering a shared object, the same reasoning session-tracking already
    applied to count/date/label. Low blast radius (contained to one module, no existing user data to
    migrate since this feature hasn't shipped yet); inline, no ADR.
-7. **Input-commit UI pattern: mirror the task label's exact blur/Enter commit discipline for all four
-   new fields.** Validate on the `input` event (range check, reject-and-revert per §2's documented
-   exception), commit only on `blur` or `Enter` (never on an intermediate keystroke) — the same
-   pattern `src/ui/index.js`'s existing `commitLabel()`/`validateLabelInput()` pair already
-   establishes. No legitimate alternative given `spec.md` §1's explicit "same discipline as the task
-   label" requirement; inline, no ADR.
+7. **Input-commit UI pattern: mirror only the task label's commit-trigger discipline (blur/Enter), not
+   its per-keystroke validation.** The label's own `validateLabelInput()` rejects-and-reverts on every
+   `input` event because a length cap is meaningful to enforce live. A duration/cycle-length field is
+   different: the User must be free to type an intermediate, momentarily-invalid state (e.g. clearing
+   "25" to type "50") without it being reverted mid-edit. So these four fields validate **only at
+   commit time** (`blur`/`Enter`) — the field accepts any typed text live, and validation +
+   reject-and-revert-with-message happens once, at the same commit moment `commitLabel()` already
+   fires, per `spec.md` AC-02/AC-11 and `spec.md` §6 NFR "Commit discipline" (corrected 2026-09-29 —
+   the earlier draft of this decision copied the label's *per-keystroke* validation by mistake; only
+   the *commit-trigger* discipline is shared). No legitimate alternative given `spec.md` §1's explicit
+   "same discipline as the task label" requirement (referring to the commit trigger); inline, no ADR.
 
 Every tactical decision in §5–§8 traces to one of these seeds. No tactical decision below contradicts
 a strategic choice.
@@ -209,19 +222,29 @@ src/
 │                   immediately if the target phase type is currently idle, defers to the
 │                   next fresh start otherwise; settle()'s Long-break decision reads the
 │                   current cycle length at completion time, not a value baked in earlier
-│                   (AC-13). New pure functions, no engine-state access: per-setting stored-
-│                   value fallback validation (validateStoredDuration(raw),
+│                   (AC-13). "Idle" here means the phase has never been started since its
+│                   last reset AND remainingMs still equals the full duration it was given
+│                   AT THAT START/RESET moment — not the live current config — so a config
+│                   change while a phase is genuinely running or paused is distinguishable
+│                   from one while it's idle without a new boolean flag (see ADR-0001
+│                   Amendment for the full reasoning and clampRemaining()/durationFor()'s
+│                   corrected contract). New pure functions, no engine-state access:
+│                   per-setting stored-value fallback validation (validateStoredDuration(raw),
 │                   validateStoredCycleLength(raw)) and input-commit validation
 │                   (validateDurationInput / validateCycleLengthInput), mirroring
-│                   validateStoredCount/validateLabelInput's existing shape.>
+│                   validateStoredCount's existing shape.>
 ├── ui/
 │   └── index.js   <mount(root, engine) extended: three duration input fields + one
-│                   cycle-length input field, each committing on blur/Enter (mirroring
-│                   commitLabel()/validateLabelInput()'s existing pattern) — a commit calls
-│                   the engine's new setConfiguredDurations/setCycleLength method, then
+│                   cycle-length input field, each committing on blur/Enter only (mirroring
+│                   commitLabel()'s commit-trigger discipline, not validateLabelInput()'s
+│                   per-keystroke validation — see §4 decision 7) — a commit calls the
+│                   engine's new setConfiguredDurations/setCycleLength method, then
 │                   persistDurationConfig(storage, {...}), the second write gatekeeper
 │                   (ADR-0002). readPersistedDurationConfig(storage) added alongside
-│                   readPersistedState, run at mount, each field validated independently.>
+│                   readPersistedState — run at mount, AND re-run as a pre-start correction
+│                   check right before any phase type starts fresh (AC-06/AC-12), each field
+│                   validated independently; an invalid value found at either read point is
+│                   corrected and written back via persistDurationConfig immediately.>
 └── main.js        <unchanged: mount(document.getElementById('app'), createTimerEngine())>
 ```
 
@@ -244,7 +267,7 @@ C4Container
 
     Rel(user, ui, "Clicks/keyboard-activates controls; types durations/cycle length/label; reads phase, countdown, label, count", "DOM events")
     Rel(ui, logic, "start(now) / pause(now) / reset(now) / getSnapshot(now) / setConfiguredDurations(...) / setCycleLength(n)", "direct function calls")
-    Rel(ui, storage, "Reads on load; writes on duration commit, cycle-length commit, Focus completion, label commit, or daily rollover", "Web Storage API")
+    Rel(ui, storage, "Reads on load and before each fresh phase start; writes on duration commit, cycle-length commit, pre-start correction, Focus completion, label commit, or daily rollover", "Web Storage API")
 ```
 
 The Containers view keeps the same two-module split session-tracking already drew — the Timer engine
@@ -361,12 +384,13 @@ sequenceDiagram
 |---|---|---|
 | Logging | N/A — no server; browser devtools only | — |
 | Authentication | N/A — no accounts, single local User, no login | — |
-| Authorization | Two independent write guards: session-tracking's own (count/date/label, unchanged) and this feature's new one — only a duration-field commit, a cycle-length-field commit, or the load-time/pre-start correction may trigger a write to the four `adjustable-durations:*` keys; each write always persists the app's own full current in-memory state of all four together (no adoption of an external change) | [ADR-0002](adr/0002-centralize-duration-config-writes.md), `spec.md` §5 AC-08 |
-| Error handling | Fail-soft in `src/ui/` is the repo default (clamp, never throw) — **except** the duration/cycle-length fields, which deliberately reject-with-message and revert rather than clamp, mirroring the task label's own already-documented exception | `CLAUDE.md` Conventions; `spec.md` §1 (documented exception, §2 of this SAD) |
+| Authorization | Two independent write guards: session-tracking's own (count/date/label, unchanged) and this feature's new one — only a duration-field commit, a cycle-length-field commit, or the load-time/pre-start correction may **trigger a write** to the four `adjustable-durations:*` keys, and each such write always persists the app's own full current in-memory state of all four together. An external write (another tab, devtools) never triggers any app logic — but that is distinct from whether its *value* is later read: a valid value found at the next read point (mount, or the pre-start correction check) is used like any other stored value, per `spec.md` §6.1's own "honored by design" language — it is not "adopted" via a triggered write, it is simply read, same as any value that happened to be there | [ADR-0002](adr/0002-centralize-duration-config-writes.md), `spec.md` §5 AC-08, §6.1 |
+| Error handling | Fail-soft in `src/ui/` is the repo default (clamp, never throw) — **except** the duration/cycle-length fields, which deliberately reject-with-message and revert on commit rather than clamp, mirroring the task label's own already-documented exception | `CLAUDE.md` Conventions; `spec.md` §1 (documented exception, §2 of this SAD) |
 | ID strategy | N/A — no persisted records beyond scalar counters/a date/strings, none of them requiring an identifier | [`adr/0002-no-backend-for-v1`](../../adr/0002-no-backend-for-v1.md) |
 | Internationalisation | N/A — single language (English UI text) | — |
 | Observability | N/A — no metrics/tracing infra; NFRs verified by unit tests + the manual checks in `spec.md` §6 | `spec.md` §6 |
 | Events | N/A — no event bus; direct function calls only, extended by two new engine methods (not callbacks) — see §4 decision 4 | [ADR-0001](adr/0001-extend-engine-surface-with-configurable-durations.md) |
+| Layout convention | The countdown display reserves fixed width for a 3-digit minute value (up to 180) at all times, so no surrounding control shifts position — including mid-countdown as displayed minutes cross from 3 digits to 2. A CSS/rendering detail, not an architectural decision — no ADR; verified manually per `spec.md` §6 NFR "Display width" | `spec.md` §6 NFR "Display width"; implementation detail for `screens`/`implement` |
 
 ## 9. Architecture decisions
 
@@ -409,12 +433,14 @@ ADR files live under `docs/features/adjustable-durations/adr/NNNN-<title>.md`.
 - **When:** a write attempt to any of the four duration/cycle-length settings arrives from anything
   other than this app's own duration-commit, cycle-length-commit, or load-time/pre-start correction
   actions.
-- **Then:** the write guard ignores that attempt as a trigger for its own logic, and the next
-  legitimate write persists the full current in-memory state of all four settings together —
-  overwriting, never adopting, whatever was saved in the meantime (`spec.md` §5 AC-08, verbatim);
-  every Configured duration stays within 1–180 minutes at all times, 0 exceptions (`spec.md` §6 NFR
-  "Duration bounds", verbatim); the Configured cycle length stays within 2–8 at all times, 0
-  exceptions (`spec.md` §6 NFR "Cycle-length bounds", verbatim).
+- **Then:** the write guard ignores that attempt as a **trigger** for its own logic — the external
+  write itself never runs any app logic — and the next legitimate write persists the full current
+  in-memory state of all four settings together, overwriting whatever was saved in the meantime
+  (`spec.md` §5 AC-08, verbatim; this is distinct from whether a valid external *value* is later read
+  at the next read point — see §8 Authorization); every Configured duration stays within 1–180
+  minutes at all times, 0 exceptions (`spec.md` §6 NFR "Duration bounds", verbatim); the Configured
+  cycle length stays within 2–8 at all times, 0 exceptions (`spec.md` §6 NFR "Cycle-length bounds",
+  verbatim).
 - **How verify:** unit tests on `persistDurationConfig()` and a source-level guard scan, mirroring
   core-timer's own AC-03 test style and session-tracking's own AC-07 test style.
 
@@ -428,17 +454,22 @@ ADR files live under `docs/features/adjustable-durations/adr/NNNN-<title>.md`.
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
 | `docs/architecture-map.md` is stale (`reflects_commit: 9c8717e`, predates both core-timer and session-tracking entirely) | Medium | This SAD used a fresh explorer scan instead; recommend running `survey` to refresh the map, not blocking this pass | Tech Lead |
-| Widening `createTimerEngine()`'s public surface from 4 to 6 methods touches an already-shipped, reviewed module (ADR-0001) | Medium | Kept purely additive (two new methods, no signature change to the existing four, no altered existing behavior) and covered by new unit tests alongside the existing suite | Tech Lead |
-| Two structurally similar but independent write-guard functions (`persistState`, `persistDurationConfig`) now live in `src/ui/index.js` — a future reader must know which owns which keys | Low | Named distinctly, each with a source-level scan test proving it's the only caller of `storage.setItem` for its own key set (mirroring the AC-03/AC-07 test style); documented in §8 | Tech Lead |
+| Widening `createTimerEngine()`'s public surface from 4 to 6 methods touches an already-shipped, reviewed module (ADR-0001), and requires amending `test/logic/timer-engine.test.js`'s pinned `Object.keys(engine)` assertion (critic finding, 2026-09-29 — see §2's "not zero-impact" note) | Medium | Kept additive at the production-code level (two new methods, no signature change to the existing four, no altered existing behavior); the pinned-keys test is amended in the same PR as an expected, mechanical change, not a surprise regression | Tech Lead |
+| Two structurally similar but independent write-guard functions (`persistState`, `persistDurationConfig`) now live in `src/ui/index.js` — a future reader must know which owns which keys, and `test/logic/write-guard.test.js`'s existing all-of-`src/` scan must be extended to also permit `persistDurationConfig` as a legitimate `storage.setItem` caller (critic finding, 2026-09-29) | Low | Named distinctly, documented in §8; the scan-test amendment is tracked as a `tasks`-stage item alongside the two new functions themselves | Tech Lead |
+| The engine has no dedicated `paused` flag (idle and paused both read as `running === false`) — `setConfiguredDurations`/`setCycleLength` (ADR-0001) distinguish them by comparing `remainingMs` against the full duration captured at the phase's last start/reset, not the live current config (critic finding, 2026-09-29 — see ADR-0001 Amendment) | Medium | Documented explicitly in ADR-0001's Amendment and §5's internal decomposition; covered by a dedicated unit test for the "config changes while paused with a partially-elapsed remainingMs" case, distinct from the idle case | Tech Lead |
 | Two tabs of this same app open at once can race on writes to the same shared local storage, including the four new duration/cycle-length keys | Low | Accepted per `spec.md` §6.1 — each tab's own next legitimate write (ADR-0002) overwrites the other's; no reconciliation attempted this step, same accepted gap session-tracking already carries for count/date/label | N/A (accepted) |
-| Open decision: should quick-select duration presets be added alongside free-form input? | Open question | Resolve before a future step reconsiders it; default now is free-form numeric input only (`spec.md` §8) | sergii.kushnir@gmail.com |
 | Open decision: is the accepted multi-tab non-reconciliation gap worth solving generally across the storage layer, rather than per-feature? | Open question | Resolve before a future step that adds a second write surface (e.g. cross-device sync), if one is ever added (`spec.md` §8) | sergii.kushnir@gmail.com |
+
+**Resolved during this pass:** `spec.md` §8's first open question ("should quick-select duration
+presets be added alongside free-form input?") carried a due date of "before `design`, if
+reconsidered" — this pass is that trigger. Resolution: **keep the default** — free-form numeric
+input only, no presets, consistent with `spec.md` §3 Non-goals. Closed, not carried forward.
 
 **Accepted debt (acceptable in v1, plan to fix later):**
 - The two-tab write race (see risk row above) is accepted for v1; a future step could add cross-tab
   reconciliation via the storage-change event if it becomes a real problem (`spec.md` §6.1).
-- No preset duration profiles — free-form numeric input only for v1; presets are a UX nicety
-  deferred to a possible future step (`spec.md` §3 Non-goals).
+- No preset duration profiles — free-form numeric input only for v1, resolved above; presets remain
+  a UX nicety for a possible future step (`spec.md` §3 Non-goals).
 
 ## 12. Glossary
 
