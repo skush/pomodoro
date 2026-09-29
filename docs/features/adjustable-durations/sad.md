@@ -4,7 +4,7 @@ owner: "sergii.kushnir@gmail.com"
 reviewers: ["Tech Lead"]
 updated_at: "2026-09-29"
 feature_size: "S"
-target_surfaces: []  # filled in §4 — subset of: backend-service | web-frontend | mobile-app | desktop-app | cli | worker | library-sdk. Read (never re-derived) by api/sequences/tasks/plan-tests/review → _shared/surfaces.md
+target_surfaces: [web-frontend]  # filled in §4 — subset of: backend-service | web-frontend | mobile-app | desktop-app | cli | worker | library-sdk. Read (never re-derived) by api/sequences/tasks/plan-tests/review → _shared/surfaces.md
 ---
 
 # Software Architecture Document — adjustable-durations
@@ -136,19 +136,61 @@ types into the same page and new keys in the same local storage, not a new exter
 
 ## 4. Solution strategy
 
-<!-- 🎯 Why: the 3–4 STRATEGIC PILLARS every ADR grows from. Without §4 each ADR looks random —
-     there's no umbrella. ⭐ The densest section — the blast-radius gate fires almost always here
-     (decisions are irreversible + multi-module).
-     📋 Write: 3–4 choices; each a heading + 2–3 sentences of rationale.
-     📌 «Store content as a table of typed blocks» is a pillar — ADR-0001 grows from it. -->
-
 **Top strategic choices (the seeds for ADRs):**
 
-1. **<e.g. Module isolation through events>** — <2–3 sentences citing quality goals + constraints>.
-2. **<e.g. Single-store persistence>** — <2–3 sentences>.
-3. **<e.g. Server-rendered read side>** — <2–3 sentences>.
+1. **Target surface: `web-frontend`, continuing the surface core-timer/session-tracking already
+   declared.** No new surface — `ux-flows.md` confirms the same single screen (`SCR-01`), just
+   extended with new fields. No legitimate alternative (there is still no backend); fixed by
+   [`adr/0002-no-backend-for-v1`](../../adr/0002-no-backend-for-v1.md), not a new decision. No ADR.
+   Written to this document's frontmatter: `target_surfaces: [web-frontend]`.
+2. **UI architecture: static single-view, vanilla-JS client rendering — unchanged.** Inherited from
+   core-timer's/session-tracking's own §4 point 2 and the `CLAUDE.md` "no framework" constraint; no
+   legitimate alternative, no ADR.
+3. **Module integration: extend the existing `src/logic/index.js` and `src/ui/index.js` files, no
+   new modules.** `src/main.js` stays exactly as it is — the new duration/cycle-length UI pieces live
+   inside the same `mount()` call tree, not a separate wiring point. Direct function calls, no event
+   bus, per the fresh explorer scan's convention and core-timer's/session-tracking's own precedent.
+   No ADR for the boundary itself — but widening `src/logic/`'s public contract to serve it is
+   decision 4.
+4. **Engine configuration surface: extend `createTimerEngine()`'s returned object with two new
+   methods, `setConfiguredDurations({focus, shortBreak, longBreak})` and `setCycleLength(n)`, rather
+   than recreating the engine instance on every commit or pushing config-awareness into `src/ui/`.** →
+   [ADR-0001](adr/0001-extend-engine-surface-with-configurable-durations.md). The engine currently
+   closes over four private, immutable constants (`FOCUS_DURATION_MS`, `SHORT_BREAK_DURATION_MS`,
+   `LONG_BREAK_DURATION_MS`, `FOCUS_SESSIONS_PER_CYCLE`) set once at construction. This decision
+   extends [`core-timer/adr/0002-structural-encapsulation-control-guard`](../core-timer/adr/0002-structural-encapsulation-control-guard.md)'s
+   frozen-object public surface with two new legitimate control methods — the "fourth input"
+   `spec.md` §1 itself names — so the engine, which already owns `remainingMs`/`deadlineAt`/
+   `running`/`focusCount` privately, can correctly decide idle-updates-now vs.
+   running/paused-defers-to-next-fresh-start (AC-03/AC-04/AC-05), Reset-always-shows-current-config
+   (AC-04b), and cycle-length-evaluated-at-next-completion-not-retroactively (AC-13) — without
+   exposing that private state to any caller.
+5. **Write-guard structure: a second centralized write function, `persistDurationConfig()`, separate
+   from session-tracking's `persistState()`, called only from the three legitimate triggers.** →
+   [ADR-0002](adr/0002-centralize-duration-config-writes.md). The *policy* — only a duration-field
+   commit, a cycle-length-field commit, and the load-time/pre-start correction (AC-06/AC-12) may
+   write the four new settings, each write always persisting the full current in-memory state of all
+   four together — was already locked in during `clarify` (`spec.md` AC-08), which also mandates the
+   two write guards stay structurally separate (session-tracking's count/date/label remain writable
+   only by their own three existing triggers, untouched by duration/cycle-length commits). What this
+   ADR records is the *structural* choice for how that split policy is implemented in code, extending
+   [`session-tracking/adr/0002-centralize-session-tracking-writes`](../session-tracking/adr/0002-centralize-session-tracking-writes.md)
+   to this feature's four new keys as a sibling gatekeeper, not a widened one.
+6. **Persistence shape: four independent local-storage keys (`adjustable-durations:focus-duration`,
+   `:short-break-duration`, `:long-break-duration`, `:cycle-length`), not one combined JSON blob.**
+   Each setting's fail-soft fallback (`spec.md` AC-06/AC-12) is then trivial — a bad value in one key
+   never requires partially recovering a shared object, the same reasoning session-tracking already
+   applied to count/date/label. Low blast radius (contained to one module, no existing user data to
+   migrate since this feature hasn't shipped yet); inline, no ADR.
+7. **Input-commit UI pattern: mirror the task label's exact blur/Enter commit discipline for all four
+   new fields.** Validate on the `input` event (range check, reject-and-revert per §2's documented
+   exception), commit only on `blur` or `Enter` (never on an intermediate keystroke) — the same
+   pattern `src/ui/index.js`'s existing `commitLabel()`/`validateLabelInput()` pair already
+   establishes. No legitimate alternative given `spec.md` §1's explicit "same discipline as the task
+   label" requirement; inline, no ADR.
 
-Each tactical decision in later sections should trace to one of these seeds. Tactical decisions that *contradict* a strategic choice are red flags — surface them in §11.
+Every tactical decision in §5–§8 traces to one of these seeds. No tactical decision below contradicts
+a strategic choice.
 
 ## 5. Building block view
 
