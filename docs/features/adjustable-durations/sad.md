@@ -255,31 +255,99 @@ written through two separate gatekeeper functions rather than one merged writer.
 
 ## 6. Runtime view
 
-<!-- 🎯 Why: the RUNTIME FLOW of 1–2 critical scenarios — who talks to whom, when, in what order.
-     Without §6, §5 is just boxes with no life.
-     📋 Write: a Mermaid sequenceDiagram. Participants are names from §5 (don't invent new ones).
-     Messages are semantic («saves a draft»), NO HTTP verbs / paths / status codes — endpoint-level
-     sequences arrive at the `api` stage.
-     📌 e.g. «author → web: composes draft → web → content API: save». Seed the primary flow(s) here;
-     the `sequences` stage then covers every §5 AC (no cap). Never N/A for M+; XS/S keeps ≥1 happy-path flow. -->
-
-**Critical flow 1: <flow name>**
+**Critical flow 1: Duration commit across phase states (ADR-0001 in action)**
 
 ```mermaid
 sequenceDiagram
-    actor Actor
-    participant Web
-    participant Service
-    participant Store
-    Actor->>Web: <action>
-    Web->>Service: <call>
-    Service->>Store: <write>
-    Store-->>Service: ok
-    Service-->>Web: result
-    Web-->>Actor: confirmation
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+    participant Storage as Local storage
+
+    User->>UI: types a new duration for phase type X, commits (blur or Enter)
+    UI->>UI: validate (whole number, 1-180)
+    alt invalid
+        UI-->>User: reject, revert to last valid value, inline message states the 1-180 range
+    else valid
+        UI->>Engine: setConfiguredDurations({...current, [X]: newMs})
+        alt phase X is currently idle
+            Engine-->>UI: remainingMs for X updated immediately
+            UI-->>User: idle display shows the new duration now (AC-03)
+        else phase X is running or paused
+            Note over Engine: remainingMs/deadlineAt for the active phase untouched (AC-04/AC-05)
+            UI-->>User: countdown/frozen time unchanged; new value applies at the next fresh start
+        end
+        UI->>Storage: persistDurationConfig(storage, {all four current values}) (ADR-0002)
+        Note over UI: in-cycle focus count and today's completed-session count left untouched (AC-07)
+    end
 ```
 
-**Critical flow 2: <e.g. async event propagation>** — <if applicable, otherwise N/A>.
+**Critical flow 2: Reset after a running/paused duration change (AC-04b)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+
+    Note over Engine: phase X was running or paused when its duration was changed (Flow 1)
+    User->>UI: presses Reset
+    UI->>Engine: reset(now)
+    Engine-->>UI: snapshot { phase: X, running: false, remainingMs: current Configured duration for X }
+    UI-->>User: idle display shows the current configured duration, never the one it was running/paused with
+```
+
+**Critical flow 3: Corrupted or invalid stored value falls back to the classic default (AC-06/AC-12)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Storage as Local storage
+    participant Engine as Timer engine
+
+    Note over UI: page loads, or a phase type is about to start fresh
+    UI->>Storage: read stored adjustable-durations:* keys
+    Storage-->>UI: raw values (possibly missing, malformed, or out of range)
+    UI->>UI: validateStoredDuration(raw) / validateStoredCycleLength(raw), per key
+    alt stored value is valid (1-180 for a duration, 2-8 for cycle length)
+        UI->>Engine: setConfiguredDurations(...) / setCycleLength(...) with the stored value
+    else invalid
+        UI->>Engine: setConfiguredDurations(...) / setCycleLength(...) with the classic default (25/5/15 minutes, 4 sessions)
+        UI->>Storage: persistDurationConfig(storage, {corrected full state}) (written back immediately)
+    end
+    UI-->>User: field pre-filled with the value now in effect — never able to produce an instant or sub-minimum completion
+```
+
+**Critical flow 4: Cycle-length commit mid-cycle (AC-13)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+    participant Storage as Local storage
+
+    Note over Engine: a cycle is already in progress, in-cycle focus count partway toward the OLD cycle length
+    User->>UI: commits a new cycle length (blur or Enter)
+    UI->>UI: validate (whole number, 2-8)
+    alt invalid
+        UI-->>User: reject, revert to last valid value, inline message states the 2-8 range
+    else valid
+        UI->>Engine: setCycleLength(n)
+        Note over Engine: nothing changes yet - in-cycle focus count untouched, no retroactive Long break (AC-07/AC-13)
+        UI->>Storage: persistDurationConfig(storage, {all four current values}) (ADR-0002)
+        UI-->>User: cycle-length field shows n
+    end
+    Note over Engine: later - the next Focus session completes naturally
+    UI->>Engine: getSnapshot(now)
+    Engine->>Engine: settle(now) reads the CURRENT cycle length (n, not the value in effect when the cycle started) against the in-cycle focus count
+    alt in-cycle focus count (including this completion) has reached or passed n
+        Engine-->>UI: next phase is a Long break
+    else
+        Engine-->>UI: next phase is a Short break
+    end
+```
 
 ## 7. Deployment view
 
