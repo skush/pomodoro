@@ -8,7 +8,9 @@ import {
   readPersistedState,
   persistDurationConfig,
   readPersistedDurationConfig,
+  syncConfigFromStorage,
 } from '../../src/ui/index.js';
+import { createTimerEngine } from '../../src/logic/index.js';
 
 // session-tracking T4 (ADR-0002, spec.md AC-07): persistState/readPersistedState
 // take an injected `storage` parameter (never the bare `localStorage` global
@@ -293,5 +295,58 @@ describe('readPersistedDurationConfig (adjustable-durations T4, AC-06/AC-12)', (
     assert.doesNotThrow(() => readPersistedDurationConfig(throwing));
     assert.deepEqual(readPersistedDurationConfig(throwing), CLASSIC);
     assert.deepEqual(readPersistedDurationConfig(null), CLASSIC);
+  });
+});
+
+// adjustable-durations T5/T7 (spec.md AC-06/AC-09/AC-12): the one path both mount()
+// and the pre-start correction use — read + validate + write back, then push the
+// values in effect into the engine.
+describe('syncConfigFromStorage (adjustable-durations T5/T7)', () => {
+  const MIN = 60 * 1000;
+
+  test('AC-09: pushes the stored config into the engine and returns it', () => {
+    const storage = recordingStorage();
+    persistDurationConfig(storage, { focus: 50, shortBreak: 10, longBreak: 20, cycleLength: 2 });
+    const engine = createTimerEngine();
+    assert.deepEqual(syncConfigFromStorage(storage, engine), { focus: 50, shortBreak: 10, longBreak: 20, cycleLength: 2 });
+    assert.equal(engine.getSnapshot(0).remainingMs, 50 * MIN);
+    engine.start(0);
+    assert.equal(engine.getSnapshot(50 * MIN).phase, 'short_break');
+    assert.equal(engine.getSnapshot(50 * MIN).remainingMs, 10 * MIN);
+  });
+
+  test('AC-06: invalid values set between load and start run the classic default, corrected and written back, no instant completion', () => {
+    const storage = recordingStorage();
+    const engine = createTimerEngine();
+    syncConfigFromStorage(storage, engine); // load
+    for (const bad of ['0', '-3', '', 'abc', '12.5', '181']) {
+      storage.setItem('adjustable-durations:focus-duration', bad); // tampered before Start
+      storage.setItem('adjustable-durations:cycle-length', bad);
+      const fresh = createTimerEngine();
+      syncConfigFromStorage(storage, fresh); // pre-start correction
+      assert.equal(storage.getItem('adjustable-durations:focus-duration'), '25', bad);
+      assert.equal(storage.getItem('adjustable-durations:cycle-length'), '4', bad);
+      fresh.start(0);
+      const snap = fresh.getSnapshot(1000);
+      assert.equal(snap.phase, 'focus');
+      assert.equal(snap.running, true);
+      assert.equal(snap.remainingMs, 25 * MIN - 1000);
+    }
+  });
+
+  test('a valid foreign value found at a read point is honored (1 and 180 / 2 and 8 are valid)', () => {
+    const storage = recordingStorage();
+    persistDurationConfig(storage, { focus: 25, shortBreak: 5, longBreak: 15, cycleLength: 4 });
+    storage.setItem('adjustable-durations:focus-duration', '180');
+    storage.setItem('adjustable-durations:short-break-duration', '1');
+    storage.setItem('adjustable-durations:cycle-length', '8');
+    const engine = createTimerEngine();
+    assert.deepEqual(syncConfigFromStorage(storage, engine), { focus: 180, shortBreak: 1, longBreak: 15, cycleLength: 8 });
+  });
+
+  test('unreadable storage yields the classic defaults with no exception', () => {
+    const engine = createTimerEngine();
+    assert.doesNotThrow(() => syncConfigFromStorage(null, engine));
+    assert.equal(engine.getSnapshot(0).remainingMs, 25 * MIN);
   });
 });

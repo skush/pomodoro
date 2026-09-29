@@ -13,10 +13,12 @@ import {
   applyCountUpdate,
   validateStoredDuration,
   validateStoredCycleLength,
+  validateDurationInput,
 } from '../logic/index.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
 const LABEL_LIMIT_MESSAGE = 'Task label is limited to 100 characters.';
+const DURATION_RANGE_MESSAGE = 'Enter a whole number from 1 to 180.';
 
 const COUNT_KEY = 'session-tracking:count';
 const DATE_KEY = 'session-tracking:date';
@@ -124,6 +126,80 @@ export function readPersistedDurationConfig(storage) {
   return config;
 }
 
+// adjustable-durations T5/T7 (spec.md AC-06/AC-09/AC-12, sad.md §6 Flow 3): the ONE
+// path both mount() and the pre-start correction use — read + validate each stored
+// value (writing any correction straight back), then push the values now in effect
+// into the engine. A started phase ignores the durations until its next fresh start
+// (engine ADR-0001), so calling this right before a Start is always safe.
+export function syncConfigFromStorage(storage, engine) {
+  const config = readPersistedDurationConfig(storage);
+  engine.setConfiguredDurations(config);
+  engine.setCycleLength(config.cycleLength);
+  return config;
+}
+
+// adjustable-durations T5 (screens.md «Numeric setting field», sad.md §4 decision 7):
+// a labelled whole-number field that accepts any typed text live and validates only
+// at commit time (blur / Enter — mirroring commitLabel's trigger, not its
+// per-keystroke check). An invalid commit reverts to the last valid value and shows
+// the range message; a valid one hides the message and calls `onCommit(value)`.
+function createNumericField({ id, labelText, rangeMessage, validate, initialValue, onCommit }) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'setting-field';
+
+  const messageId = `${id}-message`;
+
+  const fieldLabel = document.createElement('label');
+  fieldLabel.className = 'setting-field-label';
+  fieldLabel.htmlFor = id;
+  fieldLabel.textContent = labelText;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.inputMode = 'numeric';
+  input.autocomplete = 'off';
+  input.id = id;
+  input.className = 'setting-input';
+  input.value = String(initialValue);
+  input.setAttribute('aria-describedby', messageId);
+
+  const message = document.createElement('p');
+  message.id = messageId;
+  message.className = 'setting-message';
+  message.setAttribute('aria-live', 'polite');
+  message.textContent = rangeMessage;
+  message.hidden = true;
+
+  let lastValid = initialValue;
+
+  function commit() {
+    const result = validate(input.value);
+    if (!result.valid) {
+      input.value = String(lastValid);
+      message.hidden = false;
+      return;
+    }
+    message.hidden = true;
+    lastValid = result.value;
+    onCommit(result.value);
+  }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      input.blur();
+    }
+  });
+
+  function setValue(value) {
+    lastValid = value;
+    input.value = String(value);
+  }
+
+  wrapper.append(fieldLabel, input, message);
+  return { element: wrapper, setValue };
+}
+
 const PHASE_LABELS = {
   [PHASES.FOCUS]: 'Focus',
   [PHASES.SHORT_BREAK]: 'Short break',
@@ -190,6 +266,9 @@ export function mount(root, engine) {
   root.append(card);
 
   const storage = acquireStorage();
+  // adjustable-durations T5 (sad.md §6 Flows 1/3): in-memory full config, seeded by
+  // the same read-validate-correct path the pre-start check uses.
+  let config = syncConfigFromStorage(storage, engine);
   const persisted = readPersistedState(storage);
   labelField.value = persisted.label;
   let lastAcceptedLabel = persisted.label;
@@ -252,6 +331,40 @@ export function mount(root, engine) {
     }
     sessionCount.textContent = sessionCountText(count);
   }
+
+  // adjustable-durations T5 (spec.md AC-01/AC-03, sad.md §6 Flow 1): a valid committed
+  // duration goes to the engine (idle phase updates at once, running/paused untouched)
+  // and then to storage as the FULL four-value state — the only writer besides
+  // commitCycleLength and the read-time correction (ADR-0002).
+  function commitDuration(key, value) {
+    config = { ...config, [key]: value };
+    engine.setConfiguredDurations(config);
+    persistDurationConfig(storage, config);
+    render();
+  }
+
+  const durationFields = [
+    { key: 'focus', id: 'duration-focus', labelText: 'Focus' },
+    { key: 'shortBreak', id: 'duration-short-break', labelText: 'Short break' },
+    { key: 'longBreak', id: 'duration-long-break', labelText: 'Long break' },
+  ].map(({ key, id, labelText }) => ({
+    key,
+    field: createNumericField({
+      id,
+      labelText,
+      rangeMessage: DURATION_RANGE_MESSAGE,
+      validate: validateDurationInput,
+      initialValue: config[key],
+      onCommit: (value) => commitDuration(key, value),
+    }),
+  }));
+
+  const durationsGroup = document.createElement('fieldset');
+  durationsGroup.className = 'settings-group';
+  const durationsLegend = document.createElement('legend');
+  durationsLegend.textContent = 'Durations (minutes)';
+  durationsGroup.append(durationsLegend, ...durationFields.map(({ field }) => field.element));
+  card.append(durationsGroup);
 
   function render() {
     const now = Date.now();
