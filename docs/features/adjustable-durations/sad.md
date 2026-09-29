@@ -15,56 +15,71 @@ target_surfaces: []  # filled in §4 — subset of: backend-service | web-fronte
 
 ## 1. Introduction and goals
 
-<!-- 🎯 Why: durable memory of «what + the three dominant qualities + who cares». A year from
-     now nobody recalls which three qualities were critical for this system.
-     📋 Write: 1 ¶ intent + 3 lines of top-3 quality goals + a stakeholders table.
-     ¶4 is the override slot — critic `Override` resolutions emit «Decision override: <headline>
-     — rationale: <reason>» bullets here so downstream skills see the deliberate choice. -->
-
-**Intent.** <One paragraph from spec §2 Goals — what we're building and for whom.>
+**Intent.** adjustable-durations lets a User set their own Focus / Short-break / Long-break
+durations (1–180 minutes each) and their own cycle length (2–8 Focus sessions before a Long break),
+replacing the classic 25/5/15/4 constants core-timer shipped — while every one of core-timer's and
+session-tracking's existing correctness guarantees (wall-clock accuracy, the daily completed-session
+count, the single-writer storage guard) keeps holding exactly as before, unaffected by whatever the
+User configures.
 
 **Top-3 quality goals (1-liners; full scenarios in §10):**
 
-1. <e.g. "Availability under partial failure of a downstream module">
-2. <e.g. "Read performance for the dashboard under data-scale growth">
-3. <e.g. "Recoverability with <30 min RTO">
+1. **Change-isolation correctness** — a duration or cycle-length commit is perfectly predictable: an
+   idle phase updates immediately, a running or paused phase is never disturbed, and Reset always
+   shows the current configuration, never a stale one.
+2. **Corrupted-input resilience** — a bad committed or stored duration/cycle-length can never produce
+   an instant or sub-minimum phase completion; it always falls back to the classic default.
+3. **Persisted-state integrity** — extends session-tracking's write-guard discipline so only this
+   feature's own three legitimate triggers (duration-commit, cycle-length-commit, load-time/pre-start
+   correction) ever determine what's saved for the four new settings.
 
 **Stakeholders.**
 
 | Role | Interest | Sign-off owner? |
 |---|---|---|
-| <author role from glossary> | <feature usage> | No |
-| <consumer role from glossary> | <read usage> | No |
+| User | Sets their own Focus/Short-break/Long-break durations and cycle length; needs a running/paused phase never disrupted and settings to survive reloads | No |
+| PM (sergii.kushnir@gmail.com) | Owns the roadmap step; confirms the change-isolation and corrupted-input NFRs are met before it's marked done | No |
 | Tech Lead | SAD approval | Yes |
 
-<!-- Decision overrides (¶4) — populated by the critic resolution loop, empty otherwise. -->
+<!-- Decision overrides (¶4) — none from the critic pass yet. -->
 
 ## 2. Constraints
 
-<!-- 🎯 Why: §4 strategy only works when §2 has fixed WHAT IS ALREADY FIXED — stack, versions,
-     deadline, regulatory. This is an input, not an output.
-     📋 Write: four blocks — Technical / Organisational / Conventions / Regulatory.
-     📌 Pin versions («<datastore> 18», not «<datastore>»); «Q3 deadline — hard», not «ideally».
-     Never N/A — every feature inherits at least Conventions + Technical. -->
-
 **Technical.**
-- <Language + version>
-- <Framework(s) + version>
-- <Datastore(s) + version>
-- <Architecture convention — e.g. the layering style from the project convention file>
+- JavaScript (ES modules), Node.js ≥18 for tooling/tests only — the shipped artifact runs in any
+  modern browser with zero runtime dependency on Node (unchanged from core-timer/session-tracking).
+- No framework — deliberately vanilla JS/CSS/HTML (`CLAUDE.md`, [`adr/0002-no-backend-for-v1`](../../adr/0002-no-backend-for-v1.md)).
+- Persistence: browser local storage only, written exclusively from `src/ui/index.js`'s centralized
+  write functions (never `src/logic/`), extending the existing `persistState`/`readPersistedState`
+  pattern session-tracking established.
+- Architecture convention: layered — `src/logic/` (pure) → `src/ui/` (DOM + storage) →
+  `src/main.js` (wiring), unchanged from core-timer/session-tracking, per `CLAUDE.md`.
 
 **Organisational.**
-- <Effort budget — e.g. 3 person-weeks>
-- <Deadline — e.g. 2026-Q3 hard>
-- <Team composition>
+- Effort budget: S — 2–5 PRs, ~1 week (`.size`, `docs/roadmap.md` step 4).
+- Deadline: none hard; the next unblocked roadmap step now that session-tracking has shipped.
+- Team: solo — same as core-timer/session-tracking (Architect/Tech Lead/PM are the same person).
 
 **Conventions.**
-- <Link to the project's convention file>
-- <Naming, ID strategy, error-handling pattern>
+- `docs/architecture-map.md` is **stale** (`reflects_commit: 9c8717e`, predating both core-timer's
+  and session-tracking's actual implementation) — this SAD relies on a fresh explorer scan of
+  current `HEAD` instead of the map; flagged as a §11 risk recommending a `survey` refresh, not
+  blocking this pass (same accepted gap session-tracking's own SAD already flagged).
+- No ID strategy needed — no persisted records beyond scalar counters/strings in localStorage, same
+  reasoning as [`adr/0002-no-backend-for-v1`](../../adr/0002-no-backend-for-v1.md).
+- localStorage key convention confirmed by the scan: `feature-name:key` (e.g.
+  `session-tracking:count`) — new keys follow the same shape: `adjustable-durations:focus-duration`,
+  `:short-break-duration`, `:long-break-duration`, `:cycle-length`.
+- Error handling: fail-soft in `src/ui/` is `CLAUDE.md`'s default (clamp, never throw) — **but** the
+  duration and cycle-length fields follow the same **documented exception** session-tracking's task
+  label already established: invalid commits are **rejected-with-message and revert to the last
+  valid value**, never silently clamped to the range boundary (`spec.md` AC-02/AC-11).
 
 **Regulatory / external.**
-- <e.g. data-retention / deletion behaviour per ADR-NNNN>
-- <e.g. applicable compliance controls, or N/A with a reason>
+- Data classification: internal — durations and cycle length are plain numeric preferences,
+  persisted only in this browser's local storage; nothing transmitted (spec §6.1).
+- No personal data touched — same reasoning as core-timer/session-tracking (spec §6.1).
+- No compliance controls apply — Security review: N/A (spec §6.1).
 
 ## 3. Context and scope
 
