@@ -223,12 +223,12 @@ src/
 │                   next fresh start otherwise; settle()'s Long-break decision reads the
 │                   current cycle length at completion time, not a value baked in earlier
 │                   (AC-13). "Idle" here means the phase has never been started since its
-│                   last reset AND remainingMs still equals the full duration it was given
-│                   AT THAT START/RESET moment — not the live current config — so a config
-│                   change while a phase is genuinely running or paused is distinguishable
-│                   from one while it's idle without a new boolean flag (see ADR-0001
-│                   Amendment for the full reasoning and clampRemaining()/durationFor()'s
-│                   corrected contract). New pure functions, no engine-state access:
+│                   last reset — tracked by a private phaseStarted flag (set by start(),
+│                   cleared by reset() and by settle() entering the next phase) and exposed
+│                   read-only as snapshot.idle; the full duration pinned at that start/reset
+│                   moment (phaseFullMs, not the live config) bounds clampRemaining(). The
+│                   setters also enforce 1–180 / 2–8 themselves (see ADR-0001 Amendments 1
+│                   and 2). New pure functions, no engine-state access:
 │                   per-setting stored-value fallback validation (validateStoredDuration(raw),
 │                   validateStoredCycleLength(raw)) and input-commit validation
 │                   (validateDurationInput / validateCycleLengthInput), mirroring
@@ -244,7 +244,13 @@ src/
 │                   readPersistedState — run at mount, AND re-run as a pre-start correction
 │                   check right before any phase type starts fresh (AC-06/AC-12), each field
 │                   validated independently; an invalid value found at either read point is
-│                   corrected and written back via persistDurationConfig immediately.>
+│                   corrected and written back via persistDurationConfig immediately.
+│                   The pre-start check (prepareStart) is skipped on Resume (snapshot.idle
+│                   false — not a fresh start) and when storage is unavailable; if the
+│                   last save failed, it first retries that save once (one attempt per
+│                   fresh Start, full four-value state) and only reads storage once the
+│                   save succeeds — otherwise the unsaved in-memory commit stands (review
+│                   2026-09-29, ADR-0002 Amendment).>
 └── main.js        <unchanged: mount(document.getElementById('app'), createTimerEngine())>
 ```
 
@@ -329,7 +335,11 @@ sequenceDiagram
     participant Storage as Local storage
     participant Engine as Timer engine
 
-    Note over UI: page loads, or a phase type is about to start fresh
+    Note over UI: page loads, or a phase type is about to start fresh (not on Resume)
+    opt pre-start only - the last save failed
+        UI->>Storage: persistDurationConfig(storage, {full in-memory state}) - one retry
+        Note over UI: still failing - skip the read below, the unsaved in-memory values stand
+    end
     UI->>Storage: read stored adjustable-durations:* keys
     Storage-->>UI: raw values (possibly missing, malformed, or out of range)
     UI->>UI: validateStoredDuration(raw) / validateStoredCycleLength(raw), per key
@@ -484,7 +494,7 @@ ADR files live under `docs/features/adjustable-durations/adr/NNNN-<title>.md`.
 | `docs/architecture-map.md` is stale (`reflects_commit: 9c8717e`, predates both core-timer and session-tracking entirely) | Medium | This SAD used a fresh explorer scan instead; recommend running `survey` to refresh the map, not blocking this pass | Tech Lead |
 | Widening `createTimerEngine()`'s public surface from 4 to 6 methods touches an already-shipped, reviewed module (ADR-0001), and requires amending `test/logic/timer-engine.test.js`'s pinned `Object.keys(engine)` assertion (critic finding, 2026-09-29 — see §2's "not zero-impact" note) | Medium | Kept additive at the production-code level (two new methods, no signature change to the existing four, no altered existing behavior); the pinned-keys test is amended in the same PR as an expected, mechanical change, not a surprise regression | Tech Lead |
 | Two structurally similar but independent write-guard functions (`persistState`, `persistDurationConfig`) now live in `src/ui/index.js` — a future reader must know which owns which keys, and `test/logic/write-guard.test.js`'s existing all-of-`src/` scan must be extended to also permit `persistDurationConfig` as a legitimate `storage.setItem` caller (critic finding, 2026-09-29) | Low | Named distinctly, documented in §8; the scan-test amendment is tracked as a `tasks`-stage item alongside the two new functions themselves | Tech Lead |
-| The engine has no dedicated `paused` flag (idle and paused both read as `running === false`) — `setConfiguredDurations`/`setCycleLength` (ADR-0001) distinguish them by comparing `remainingMs` against the full duration captured at the phase's last start/reset, not the live current config (critic finding, 2026-09-29 — see ADR-0001 Amendment) | Medium | Documented explicitly in ADR-0001's Amendment and §5's internal decomposition; covered by a dedicated unit test for the "config changes while paused with a partially-elapsed remainingMs" case, distinct from the idle case | Tech Lead |
+| The engine has no dedicated `paused` flag (idle and paused both read as `running === false`) — `setConfiguredDurations` (ADR-0001) distinguishes them with a private `phaseStarted` flag, exposed as `snapshot.idle` (critic finding, 2026-09-29; mechanism corrected by review — see ADR-0001 Amendment 2) | Medium | Documented in ADR-0001's Amendments and §5's internal decomposition; covered by dedicated unit tests for "config changes while paused with a partially-elapsed remainingMs" and "paused at the instant it started", both distinct from the idle case | Tech Lead |
 | Two tabs of this same app open at once can race on writes to the same shared local storage, including the four new duration/cycle-length keys | Low | Accepted per `spec.md` §6.1 — each tab's own next legitimate write (ADR-0002) overwrites the other's; no reconciliation attempted this step, same accepted gap session-tracking already carries for count/date/label | N/A (accepted) |
 | Open decision: is the accepted multi-tab non-reconciliation gap worth solving generally across the storage layer, rather than per-feature? | Open question | Resolve before a future step that adds a second write surface (e.g. cross-device sync), if one is ever added (`spec.md` §8) | sergii.kushnir@gmail.com |
 

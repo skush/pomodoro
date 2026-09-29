@@ -1,6 +1,10 @@
-// DOM layer: renders the phase label + countdown and wires Start/Pause/Reset.
-// The only caller of the logic engine's methods (AC-03) — no other input source
-// (no window 'message' listener, nothing else) is ever wired to it.
+// DOM layer: renders the phase label + countdown, wires Start/Pause/Reset, the task
+// label, the session count, and the adjustable-durations settings fields (three
+// durations + cycle length). Owns all localStorage access, through two write
+// gatekeepers: persistState (session-tracking) and persistDurationConfig
+// (adjustable-durations). The only caller of the logic engine's methods (AC-03) — no
+// other input source (no window 'message' or 'storage' listener, nothing else) is
+// ever wired to it.
 
 import {
   formatDuration,
@@ -11,14 +15,25 @@ import {
   validateStoredLabel,
   validateLabelInput,
   applyCountUpdate,
+  validateStoredDuration,
+  validateStoredCycleLength,
+  validateDurationInput,
+  validateCycleLengthInput,
 } from '../logic/index.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
 const LABEL_LIMIT_MESSAGE = 'Task label is limited to 100 characters.';
+const DURATION_RANGE_MESSAGE = 'Enter a whole number from 1 to 180.';
+const CYCLE_LENGTH_RANGE_MESSAGE = 'Enter a whole number from 2 to 8.';
 
 const COUNT_KEY = 'session-tracking:count';
 const DATE_KEY = 'session-tracking:date';
 const LABEL_KEY = 'session-tracking:label';
+
+const FOCUS_DURATION_KEY = 'adjustable-durations:focus-duration';
+const SHORT_BREAK_DURATION_KEY = 'adjustable-durations:short-break-duration';
+const LONG_BREAK_DURATION_KEY = 'adjustable-durations:long-break-duration';
+const CYCLE_LENGTH_KEY = 'adjustable-durations:cycle-length';
 
 // session-tracking T4 (ADR-0002, AC-07): the ONLY function anywhere that may call
 // `storage.setItem` for the count/date/label keys — the write guard's single
@@ -72,6 +87,148 @@ function acquireStorage() {
   } catch {
     return null;
   }
+}
+
+// adjustable-durations T4 (ADR-0002, spec.md AC-08): the SECOND storage gatekeeper —
+// the only function that may call `storage.setItem` for the four adjustable-durations
+// keys, alongside (never widening) persistState's count/date/label guard. Always
+// writes the FULL {focus, shortBreak, longBreak, cycleLength} state (minutes / count),
+// so a foreign edit to any of the four keys is overwritten, never adopted, by the
+// next legitimate write. Fail-soft like persistState: a throwing (or absent) storage
+// is swallowed and the app keeps running on its in-memory state. Returns whether the
+// write succeeded, so the caller knows storage no longer matches memory (review fix #1).
+export function persistDurationConfig(storage, config) {
+  try {
+    storage.setItem(FOCUS_DURATION_KEY, String(config.focus));
+    storage.setItem(SHORT_BREAK_DURATION_KEY, String(config.shortBreak));
+    storage.setItem(LONG_BREAK_DURATION_KEY, String(config.longBreak));
+    storage.setItem(CYCLE_LENGTH_KEY, String(config.cycleLength));
+    return true;
+  } catch {
+    // fail-soft: never throw to the User, never surface an error
+    return false;
+  }
+}
+
+// adjustable-durations T4 (spec.md AC-06/AC-12): reads all four values, each through
+// its own stored-value validator so one bad key never blocks the others. If any
+// stored value was missing or invalid (i.e. the validated value is not what was
+// stored), the corrected full state is written straight back via
+// persistDurationConfig. Never throws, including for a null/throwing storage.
+export function readPersistedDurationConfig(storage) {
+  const rawFocus = safeGetItem(storage, FOCUS_DURATION_KEY);
+  const rawShort = safeGetItem(storage, SHORT_BREAK_DURATION_KEY);
+  const rawLong = safeGetItem(storage, LONG_BREAK_DURATION_KEY);
+  const rawCycle = safeGetItem(storage, CYCLE_LENGTH_KEY);
+  const config = {
+    focus: validateStoredDuration(rawFocus, 'focus'),
+    shortBreak: validateStoredDuration(rawShort, 'shortBreak'),
+    longBreak: validateStoredDuration(rawLong, 'longBreak'),
+    cycleLength: validateStoredCycleLength(rawCycle),
+  };
+  const needsCorrection =
+    String(config.focus) !== rawFocus ||
+    String(config.shortBreak) !== rawShort ||
+    String(config.longBreak) !== rawLong ||
+    String(config.cycleLength) !== rawCycle;
+  if (needsCorrection) persistDurationConfig(storage, config);
+  return config;
+}
+
+// adjustable-durations T5/T7 (spec.md AC-06/AC-09/AC-12, sad.md §6 Flow 3): the ONE
+// path both mount() and the pre-start correction use — read + validate each stored
+// value (writing any correction straight back), then push the values now in effect
+// into the engine. A started phase ignores the durations until its next fresh start
+// (engine ADR-0001), so calling this right before a Start is always safe.
+export function syncConfigFromStorage(storage, engine) {
+  const config = readPersistedDurationConfig(storage);
+  engine.setConfiguredDurations(config);
+  engine.setCycleLength(config.cycleLength);
+  return config;
+}
+
+// adjustable-durations T7 + review fixes (spec.md AC-01/AC-03/AC-06/AC-08): what the
+// Start handler does before starting. Returns { config, lastWriteOk } — the config now
+// in effect and whether storage now matches it.
+// - Resume (the phase is paused, not idle) is not a fresh start: nothing is read or
+//   written, the in-memory config stands.
+// - Storage unavailable: nothing to read or write, the in-memory config stands.
+// - The last save failed: storage lags what the User committed, so adopting it would
+//   silently discard that commit. Retry the save ONCE (this Start only — no loop, no
+//   timer); if it still fails, the in-memory config stands until the next fresh
+//   Start or commit.
+// - Otherwise (or once the retry succeeded) this is the pre-start correction: the same
+//   read-validate-correct path mount() uses.
+// `snapshot` is the last rendered snapshot — never a fresh getSnapshot() here, which
+// would consume a pending Focus-completion credit before render() could count it.
+export function prepareStart(storage, engine, config, snapshot, lastWriteOk) {
+  if (!snapshot.idle || storage === null) return { config, lastWriteOk };
+  if (!lastWriteOk && !persistDurationConfig(storage, config)) {
+    return { config, lastWriteOk: false };
+  }
+  return { config: syncConfigFromStorage(storage, engine), lastWriteOk: true };
+}
+
+// adjustable-durations T5 (screens.md «Numeric setting field», sad.md §4 decision 7):
+// a labelled whole-number field that accepts any typed text live and validates only
+// at commit time (blur / Enter — mirroring commitLabel's trigger, not its
+// per-keystroke check). An invalid commit reverts to the last valid value and shows
+// the range message; a valid one hides the message and calls `onCommit(value)`.
+function createNumericField({ id, labelText, rangeMessage, validate, initialValue, onCommit }) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'setting-field';
+
+  const messageId = `${id}-message`;
+
+  const fieldLabel = document.createElement('label');
+  fieldLabel.className = 'setting-field-label';
+  fieldLabel.htmlFor = id;
+  fieldLabel.textContent = labelText;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.inputMode = 'numeric';
+  input.autocomplete = 'off';
+  input.id = id;
+  input.className = 'setting-input';
+  input.value = String(initialValue);
+  input.setAttribute('aria-describedby', messageId);
+
+  const message = document.createElement('p');
+  message.id = messageId;
+  message.className = 'setting-message';
+  message.setAttribute('aria-live', 'polite');
+  message.textContent = rangeMessage;
+  message.hidden = true;
+
+  let lastValid = initialValue;
+
+  function commit() {
+    const result = validate(input.value);
+    if (!result.valid) {
+      input.value = String(lastValid);
+      message.hidden = false;
+      return;
+    }
+    message.hidden = true;
+    lastValid = result.value;
+    onCommit(result.value);
+  }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      input.blur();
+    }
+  });
+
+  function setValue(value) {
+    lastValid = value;
+    input.value = String(value);
+  }
+
+  wrapper.append(fieldLabel, input, message);
+  return { element: wrapper, setValue };
 }
 
 const PHASE_LABELS = {
@@ -140,6 +297,11 @@ export function mount(root, engine) {
   root.append(card);
 
   const storage = acquireStorage();
+  // adjustable-durations T5 (sad.md §6 Flows 1/3): in-memory full config, seeded by
+  // the same read-validate-correct path the pre-start check uses.
+  let config = syncConfigFromStorage(storage, engine);
+  // review fix #1: false once a commit's write failed — storage then lags memory.
+  let lastWriteOk = true;
   const persisted = readPersistedState(storage);
   labelField.value = persisted.label;
   let lastAcceptedLabel = persisted.label;
@@ -203,9 +365,69 @@ export function mount(root, engine) {
     sessionCount.textContent = sessionCountText(count);
   }
 
+  // adjustable-durations T5 (spec.md AC-01/AC-03, sad.md §6 Flow 1): a valid committed
+  // duration goes to the engine (idle phase updates at once, running/paused untouched)
+  // and then to storage as the FULL four-value state — the only writer besides
+  // commitCycleLength and the read-time correction (ADR-0002).
+  function commitDuration(key, value) {
+    config = { ...config, [key]: value };
+    engine.setConfiguredDurations(config);
+    lastWriteOk = persistDurationConfig(storage, config);
+    render();
+  }
+
+  const durationFields = [
+    { key: 'focus', id: 'duration-focus', labelText: 'Focus' },
+    { key: 'shortBreak', id: 'duration-short-break', labelText: 'Short break' },
+    { key: 'longBreak', id: 'duration-long-break', labelText: 'Long break' },
+  ].map(({ key, id, labelText }) => ({
+    key,
+    field: createNumericField({
+      id,
+      labelText,
+      rangeMessage: DURATION_RANGE_MESSAGE,
+      validate: validateDurationInput,
+      initialValue: config[key],
+      onCommit: (value) => commitDuration(key, value),
+    }),
+  }));
+
+  const durationsGroup = document.createElement('fieldset');
+  durationsGroup.className = 'settings-group';
+  const durationsLegend = document.createElement('legend');
+  durationsLegend.textContent = 'Durations (minutes)';
+  durationsGroup.append(durationsLegend, ...durationFields.map(({ field }) => field.element));
+  card.append(durationsGroup);
+
+  // adjustable-durations T6 (spec.md AC-10/AC-11/AC-14, sad.md §6 Flow 4): the engine
+  // only stores the new length — no retroactive Long break, in-cycle count and the
+  // session count untouched — then storage gets the FULL four-value state.
+  function commitCycleLength(value) {
+    config = { ...config, cycleLength: value };
+    engine.setCycleLength(value);
+    lastWriteOk = persistDurationConfig(storage, config);
+  }
+
+  const cycleLengthField = createNumericField({
+    id: 'cycle-length',
+    labelText: 'Focus sessions before a long break',
+    rangeMessage: CYCLE_LENGTH_RANGE_MESSAGE,
+    validate: validateCycleLengthInput,
+    initialValue: config.cycleLength,
+    onCommit: commitCycleLength,
+  });
+  const cycleGroup = document.createElement('div');
+  cycleGroup.className = 'settings-group';
+  cycleGroup.append(cycleLengthField.element);
+  card.append(cycleGroup);
+
+  // The snapshot render() last showed — what the User saw when they pressed Start.
+  let lastSnapshot = null;
+
   function render() {
     const now = Date.now();
     const snapshot = engine.getSnapshot(now);
+    lastSnapshot = snapshot;
     const phaseText = PHASE_LABELS[snapshot.phase] ?? snapshot.phase;
     if (label.textContent !== phaseText) label.textContent = phaseText;
     const countdownText = formatDuration(snapshot.remainingMs);
@@ -225,7 +447,19 @@ export function mount(root, engine) {
     }
   }
 
+  // adjustable-durations T7 (spec.md AC-06/AC-12, sad.md §6 Flow 3): the pre-start
+  // correction — for a fresh start, re-reads storage through the same path mount()
+  // used, so an invalid value that appeared between load and Start is corrected (and
+  // written back) before the phase begins; prepareStart() decides when that applies.
+  // The fields then show the values now in effect.
+  function refreshConfigFromStorage() {
+    ({ config, lastWriteOk } = prepareStart(storage, engine, config, lastSnapshot, lastWriteOk));
+    for (const { key, field } of durationFields) field.setValue(config[key]);
+    cycleLengthField.setValue(config.cycleLength);
+  }
+
   startBtn.addEventListener('click', () => {
+    refreshConfigFromStorage();
     engine.start(Date.now());
     render();
     refocusIfStranded(startBtn, pauseBtn);

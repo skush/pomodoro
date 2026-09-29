@@ -9,42 +9,66 @@ export const PHASES = Object.freeze({
   LONG_BREAK: 'long_break',
 });
 
-const FOCUS_DURATION_MS = 25 * 60 * 1000;
-const SHORT_BREAK_DURATION_MS = 5 * 60 * 1000;
-const LONG_BREAK_DURATION_MS = 15 * 60 * 1000;
-const FOCUS_SESSIONS_PER_CYCLE = 4;
+const MS_PER_MINUTE = 60 * 1000;
 
-function durationFor(phase) {
-  switch (phase) {
-    case PHASES.SHORT_BREAK:
-      return SHORT_BREAK_DURATION_MS;
-    case PHASES.LONG_BREAK:
-      return LONG_BREAK_DURATION_MS;
-    case PHASES.FOCUS:
-    default:
-      return FOCUS_DURATION_MS;
-  }
+// adjustable-durations: classic defaults, in whole minutes — the fallback for any
+// missing/invalid stored value (validateStoredDuration) and the engine's initial config.
+export const DEFAULT_DURATIONS_MIN = Object.freeze({ focus: 25, shortBreak: 5, longBreak: 15 });
+export const DEFAULT_CYCLE_LENGTH = 4;
+
+// adjustable-durations: the valid ranges (spec.md AC-02/AC-11, §6 NFR bounds) — shared
+// by the input/stored validators below and enforced again by the engine's own setters.
+const DURATION_MIN_MINUTES = 1;
+const DURATION_MAX_MINUTES = 180;
+const CYCLE_LENGTH_MIN = 2;
+const CYCLE_LENGTH_MAX = 8;
+
+function isWholeNumberInRange(value, min, max) {
+  return Number.isInteger(value) && value >= min && value <= max;
 }
 
-// Clamps a deadline-minus-now reading to [0, full duration]. Without the upper
-// clamp, a backward wall-clock jump (manual change, NTP correction) while a
-// phase is running would show more than the phase's own full duration.
-function clampRemaining(phase, remainingMs) {
-  return Math.min(durationFor(phase), Math.max(0, remainingMs));
+const DURATION_KEY_FOR_PHASE = {
+  [PHASES.FOCUS]: 'focus',
+  [PHASES.SHORT_BREAK]: 'shortBreak',
+  [PHASES.LONG_BREAK]: 'longBreak',
+};
+
+// Clamps a deadline-minus-now reading to [0, the phase's pinned full duration].
+// Without the upper clamp, a backward wall-clock jump (manual change, NTP
+// correction) while a phase is running would show more than the phase's own full
+// duration.
+function clampRemaining(fullMs, remainingMs) {
+  return Math.min(fullMs, Math.max(0, remainingMs));
 }
 
-// createTimerEngine() -> { start, pause, reset, getSnapshot } is the module's only
-// stateful export (AC-03: the engine only ever changes in response to these four
-// methods, called only by src/ui/, never from a 'message' listener or any other
-// input source). Other exports (PHASES, controlStates, formatDuration) are frozen
-// constants or pure functions with no access to engine state, so they cannot
-// widen the guard (ADR-0002).
+// createTimerEngine() -> { start, pause, reset, getSnapshot, setConfiguredDurations,
+// setCycleLength } is the module's only stateful export (AC-03: the engine only ever
+// changes in response to these methods, called only by src/ui/, never from a
+// 'message'/'storage' listener or any other input source). Every other export —
+// PHASES, DEFAULT_DURATIONS_MIN, DEFAULT_CYCLE_LENGTH, controlStates, formatDuration,
+// the date/count helpers and the input/stored-value validators — is a frozen constant
+// or a pure function with no access to engine state, so none can widen the guard
+// (ADR-0002).
 export function createTimerEngine() {
   let phase = PHASES.FOCUS;
   let running = false;
   let deadlineAt = null;
-  let remainingMs = durationFor(phase);
+  // adjustable-durations: the live Configured durations (minutes) — read only when a
+  // phase starts fresh. A started phase keeps `phaseFullMs`, the full duration
+  // pinned when it entered its idle state, so a later commit never touches it.
+  const configured = { ...DEFAULT_DURATIONS_MIN };
+  function configuredMs(forPhase) {
+    return configured[DURATION_KEY_FOR_PHASE[forPhase]] * MS_PER_MINUTE;
+  }
+  let phaseFullMs = configuredMs(phase);
+  let remainingMs = phaseFullMs;
+  // false while the phase is idle (never started since it began or was reset);
+  // true once started, running or paused. Only an idle phase follows live config.
+  let phaseStarted = false;
   let focusCount = 0;
+  // adjustable-durations: Focus sessions per cycle. Read at Focus-completion time
+  // (never at commit time), so a mid-cycle change shapes only the next decision.
+  let cycleLength = DEFAULT_CYCLE_LENGTH;
   // session-tracking ADR-0001: the true wall-clock moment a Focus phase's deadline
   // passed, latched here (not in getSnapshot) so it survives regardless of which
   // public method's settle() call detects the transition. getSnapshot() consumes
@@ -63,7 +87,7 @@ export function createTimerEngine() {
     }
     phase =
       phase === PHASES.FOCUS
-        ? focusCount >= FOCUS_SESSIONS_PER_CYCLE
+        ? focusCount >= cycleLength
           ? PHASES.LONG_BREAK
           : PHASES.SHORT_BREAK
         : PHASES.FOCUS;
@@ -73,7 +97,9 @@ export function createTimerEngine() {
 
     running = false;
     deadlineAt = null;
-    remainingMs = durationFor(phase);
+    phaseStarted = false;
+    phaseFullMs = configuredMs(phase);
+    remainingMs = phaseFullMs;
   }
 
   function start(now) {
@@ -81,12 +107,13 @@ export function createTimerEngine() {
     if (running) return; // AC-01b: already running — no-op, no reset
     deadlineAt = now + remainingMs;
     running = true;
+    phaseStarted = true;
   }
 
   function pause(now) {
     settle(now);
     if (!running) return; // AC-02b: not running — no-op
-    remainingMs = clampRemaining(phase, deadlineAt - now);
+    remainingMs = clampRemaining(phaseFullMs, deadlineAt - now);
     running = false;
     deadlineAt = null;
   }
@@ -95,24 +122,55 @@ export function createTimerEngine() {
     settle(now);
     running = false;
     deadlineAt = null;
-    remainingMs = durationFor(phase);
+    phaseStarted = false;
+    phaseFullMs = configuredMs(phase);
+    remainingMs = phaseFullMs;
+  }
+
+  // adjustable-durations (spec.md AC-03/04/04b/05/07): stores the new Configured
+  // durations. Any value that is not a whole number of minutes in 1–180 keeps its
+  // current setting (fail-soft) — the engine enforces the bounds itself so no caller
+  // can make a phase shorter than its valid minimum (AC-06). An idle phase shows the
+  // new value at once; a running or paused phase is untouched and picks it up at its
+  // next fresh start. Never touches focusCount.
+  function setConfiguredDurations(next) {
+    if (next === null || typeof next !== 'object') return;
+    for (const key of Object.keys(configured)) {
+      if (isWholeNumberInRange(next[key], DURATION_MIN_MINUTES, DURATION_MAX_MINUTES)) {
+        configured[key] = next[key];
+      }
+    }
+    if (!phaseStarted) {
+      phaseFullMs = configuredMs(phase);
+      remainingMs = phaseFullMs;
+    }
+  }
+
+  // adjustable-durations (spec.md AC-07/AC-10/AC-13): stores the new cycle length and
+  // nothing else — no retroactive Long break, focusCount untouched. Anything that is
+  // not a whole number in 2–8 is ignored fail-soft.
+  function setCycleLength(n) {
+    if (isWholeNumberInRange(n, CYCLE_LENGTH_MIN, CYCLE_LENGTH_MAX)) cycleLength = n;
   }
 
   function getSnapshot(now) {
     settle(now);
-    const remaining = running ? clampRemaining(phase, deadlineAt - now) : remainingMs;
+    const remaining = running ? clampRemaining(phaseFullMs, deadlineAt - now) : remainingMs;
     const consumedCompletion = justCompletedFocusAt;
     justCompletedFocusAt = null;
     return Object.freeze({
       phase,
       running,
+      // adjustable-durations: true while the phase is fresh (not started since it
+      // began or was reset) — lets the UI tell a fresh Start from a Resume.
+      idle: !phaseStarted,
       remainingMs: remaining,
       focusCount,
       justCompletedFocusAt: consumedCompletion,
     });
   }
 
-  return Object.freeze({ start, pause, reset, getSnapshot });
+  return Object.freeze({ start, pause, reset, getSnapshot, setConfiguredDurations, setCycleLength });
 }
 
 // Pure control-enablement mapping (AC-02): the Pause control is disabled
@@ -206,6 +264,50 @@ export function applyCountUpdate(state, now, justCompletedFocusAt) {
     count += 1;
   }
   return { trackedDate, count };
+}
+
+// Strict whole number: an optional leading '-' then digits only — rejects decimals,
+// exponents, whitespace, '+', hex and any trailing text that Number() would tolerate.
+const STRICT_WHOLE_NUMBER = /^-?\d+$/;
+
+function parseWholeNumberInRange(raw, min, max) {
+  if (typeof raw !== 'string' || !STRICT_WHOLE_NUMBER.test(raw)) return null;
+  const n = Number(raw);
+  return n >= min && n <= max ? n : null;
+}
+
+// adjustable-durations T3 (spec.md AC-02): a committed duration field's raw text →
+// {valid, value}. Whole minutes 1–180 only; anything else is rejected outright.
+export function validateDurationInput(raw) {
+  const value = parseWholeNumberInRange(raw, DURATION_MIN_MINUTES, DURATION_MAX_MINUTES);
+  return value === null ? { valid: false } : { valid: true, value };
+}
+
+// adjustable-durations T3 (spec.md AC-11): same shape for the cycle length, 2–8.
+export function validateCycleLengthInput(raw) {
+  const value = parseWholeNumberInRange(raw, CYCLE_LENGTH_MIN, CYCLE_LENGTH_MAX);
+  return value === null ? { valid: false } : { valid: true, value };
+}
+
+function storedToText(raw) {
+  return typeof raw === 'number' && Number.isInteger(raw) ? String(raw) : raw;
+}
+
+// adjustable-durations T3 (spec.md AC-06, §6 NFR): pure per-field fallback, mirroring
+// validateStoredCount — a missing/malformed/out-of-range stored value becomes that
+// phase type's classic default, so no stored value can yield a phase shorter than
+// its own valid minimum (or an instant completion). `phaseKey` is
+// 'focus' | 'shortBreak' | 'longBreak'; an unknown key falls back to Focus's default.
+export function validateStoredDuration(raw, phaseKey) {
+  const value = parseWholeNumberInRange(storedToText(raw), DURATION_MIN_MINUTES, DURATION_MAX_MINUTES);
+  if (value !== null) return value;
+  return DEFAULT_DURATIONS_MIN[phaseKey] ?? DEFAULT_DURATIONS_MIN.focus;
+}
+
+// adjustable-durations T3 (spec.md AC-12): stored cycle length, fallback 4.
+export function validateStoredCycleLength(raw) {
+  const value = parseWholeNumberInRange(storedToText(raw), CYCLE_LENGTH_MIN, CYCLE_LENGTH_MAX);
+  return value === null ? DEFAULT_CYCLE_LENGTH : value;
 }
 
 // Pure display formatting (spec §6 NFR): remaining time is always rounded UP to

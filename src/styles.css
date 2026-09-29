@@ -54,6 +54,12 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--accent);
+  /* adjustable-durations: reserve fixed width for the widest reading ("180:00", 6
+     glyphs; tabular digits are 1ch each, the colon is narrower) so no control moves
+     when the minutes drop from 3 digits to 2 (100:00 -> 99:59). */
+  width: 6ch;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .timer-controls {
@@ -114,5 +120,57 @@ body {
 .session-count {
   margin: 0.75rem 0 0;
   font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.settings-group {
+  width: 100%;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.settings-group legend {
+  width: 100%;
+  padding: 0;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.setting-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.setting-field-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.setting-input {
+  width: 4.5rem;
+  padding: 0.5rem 0.5rem;
+  font-size: 1rem;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--fg);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 0.5rem;
+}
+
+.setting-message {
+  margin: 0;
+  max-width: 10rem;
+  font-size: 0.85rem;
   color: var(--muted);
 }
