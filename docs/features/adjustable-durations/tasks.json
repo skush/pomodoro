@@ -1,0 +1,171 @@
+{
+  "slug": "adjustable-durations",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Make the engine's three phase durations configurable at runtime, with idle vs running/paused semantics",
+      "layer": "domain",
+      "deps": [],
+      "acs": [
+        "AC-03",
+        "AC-04",
+        "AC-04b",
+        "AC-05",
+        "AC-07"
+      ],
+      "dod": "Unit tests assert idle updates immediately, running and paused remainingMs stay byte-for-byte unchanged (paused case distinct), Reset shows current config, and counts are untouched.",
+      "files_hint": [
+        "src/logic/index.js",
+        "test/logic/timer-engine.test.js"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/engine-configurable-durations.md"
+    },
+    {
+      "id": "T2",
+      "title": "Make the engine's cycle length configurable and read it at completion time",
+      "layer": "domain",
+      "deps": [
+        "T1"
+      ],
+      "acs": [
+        "AC-07",
+        "AC-10",
+        "AC-13"
+      ],
+      "dod": "Unit tests assert setCycleLength alone changes nothing, and the next Focus completion picks Long vs Short break against the newly set cycle length, including the reached-or-passed boundary.",
+      "files_hint": [
+        "src/logic/index.js",
+        "test/logic/timer-engine.test.js"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/engine-configurable-cycle-length.md"
+    },
+    {
+      "id": "T3",
+      "title": "Add pure duration/cycle-length input and stored-value validation functions",
+      "layer": "domain",
+      "deps": [],
+      "acs": [
+        "AC-02",
+        "AC-06",
+        "AC-11",
+        "AC-12"
+      ],
+      "dod": "Unit tests pass for all valid/invalid classes (boundaries, out-of-range, decimal, exponent, empty, non-numeric) for both input and stored validators, with 0 thrown exceptions.",
+      "files_hint": [
+        "src/logic/index.js",
+        "test/logic/adjustable-durations.test.js"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/validation-functions.md"
+    },
+    {
+      "id": "T4",
+      "title": "Add persistDurationConfig / readPersistedDurationConfig as the second storage gatekeeper",
+      "layer": "infra",
+      "deps": [
+        "T3"
+      ],
+      "acs": [
+        "AC-06",
+        "AC-08",
+        "AC-12"
+      ],
+      "dod": "Unit tests assert every persistDurationConfig call writes all four keys, invalid stored values fall back per key and are written back, and the source-level scan permits only persistState and persistDurationConfig.",
+      "files_hint": [
+        "src/ui/index.js",
+        "test/logic/write-guard.test.js"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/duration-config-gatekeeper.md"
+    },
+    {
+      "id": "T5",
+      "title": "Add the three duration fields (Numeric setting field) with commit on blur/Enter and inline validation",
+      "layer": "ui",
+      "deps": [
+        "T1",
+        "T3",
+        "T4"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-09"
+      ],
+      "dod": "Manual check: a valid commit updates an idle countdown at once, leaves a running/paused countdown unchanged, an invalid commit reverts with the 1–180 message, and reload pre-fills the committed values.",
+      "files_hint": [
+        "src/ui/index.js",
+        "src/styles.css"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/duration-fields-ui.md"
+    },
+    {
+      "id": "T6",
+      "title": "Add the cycle-length field with commit on blur/Enter and inline validation",
+      "layer": "ui",
+      "deps": [
+        "T2",
+        "T3",
+        "T4",
+        "T5"
+      ],
+      "acs": [
+        "AC-10",
+        "AC-11",
+        "AC-14"
+      ],
+      "dod": "Manual check: a valid cycle-length commit persists and is pre-filled after reload, an invalid commit reverts with the 2–8 message, and the session count is unchanged.",
+      "files_hint": [
+        "src/ui/index.js"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/cycle-length-field-ui.md"
+    },
+    {
+      "id": "T7",
+      "title": "Wire load-time and pre-start correction of stored durations and cycle length",
+      "layer": "ui",
+      "deps": [
+        "T5",
+        "T6"
+      ],
+      "acs": [
+        "AC-06",
+        "AC-12"
+      ],
+      "dod": "A test with invalid stored values set between load and start shows the phase runs its classic default, the correction is written back, and 0 exceptions or instant completions occur.",
+      "files_hint": [
+        "src/ui/index.js",
+        "test/logic/write-guard.test.js"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/load-and-prestart-correction.md"
+    },
+    {
+      "id": "T8",
+      "title": "Reserve fixed width for a 3-digit minute countdown so no control shifts",
+      "layer": "ui",
+      "deps": [
+        "T5"
+      ],
+      "acs": [],
+      "dod": "Manual check across 1–180 minutes, observed live through a 100→99 minute crossing, shows no control shifts position.",
+      "files_hint": [
+        "src/styles.css"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/countdown-fixed-width.md"
+    },
+    {
+      "id": "T9",
+      "title": "Rebuild index.html and run the manual NFR checks",
+      "layer": "wiring",
+      "deps": [
+        "T7",
+        "T8"
+      ],
+      "acs": [],
+      "dod": "`npm run build` regenerates index.html committed alongside src/, and the manual persistence, commit-discipline, network and width checks pass.",
+      "files_hint": [
+        "index.html"
+      ],
+      "file": "docs/features/adjustable-durations/tasks/build-and-manual-verification.md"
+    }
+  ]
+}
