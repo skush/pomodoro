@@ -2,7 +2,7 @@
 status: Draft
 owner: "sergii.kushnir@gmail.com"
 reviewers: ["Tech Lead", "Security Lead"]
-updated_at: "2026-09-29"
+updated_at: "2026-09-30"
 feature_size: "S"
 ---
 
@@ -17,7 +17,7 @@ Today the timer tells the User what is happening only through a plain text count
 
 This is the last roadmap step (`docs/roadmap.md` step 5), deliberately held until adjustable durations shipped so that everything here reads the User-configured length instead of a hardcoded one. Core-timer explicitly deferred the progress ring, the tab-title countdown, the completion chime and phase colour-coding to this step (`docs/features/core-timer/spec.md` §3 and §8).
 
-**Committed approach:** build a trustworthy eyes-off cue layer. A Completion chime with a distinct Focus-end tone and break-end tone plays within about a second of every Phase completion — including while the tab is hidden, as long as the device is awake. On the page, a Progress ring colour-coded per phase depletes against the length the phase started with. The Tab title mirror shows the remaining whole minutes and the phase, and always says whether the phase is running, paused or waiting for Start. All of it sits in one consistent dark palette that meets WCAG AA. Rationale: a ring, a tab-title countdown and a synthesized chime are common in comparable timers, but none documents distinct end tones or chime timing in a background tab — that is the gap this step owns. The sharpest failure mode is that the background promise silently fails in the very situation it exists for, so it is an explicit, scoped and tested requirement here (§5 AC-06, §6). The success criterion: a User working in another tab never misses, or misreads, a phase end.
+**Committed approach:** build a trustworthy eyes-off cue layer. A Completion chime with a distinct Focus-end tone and break-end tone plays within 1 s of every Phase completion — including while the tab is hidden in a desktop browser, as long as the device is awake. On the page, a Progress ring colour-coded per phase depletes against the length the phase started with. The Tab title mirror shows the remaining whole minutes and the phase, and always says whether the phase is running, paused or waiting for Start. All of it sits in one consistent dark palette that meets WCAG AA. Rationale: a ring, a tab-title countdown and a synthesized chime are common in comparable timers, but none documents distinct end tones or chime timing in a background tab — that is the gap this step owns. The sharpest failure mode is that the background promise silently fails in the very situation it exists for, so it is an explicit, scoped and tested requirement here (§5 AC-06, §6). The success criterion: a User working in another tab never misses, or misreads, a phase end.
 
 Traceability:
 - Resolves core-timer §8's open question on visually distinguishing the active phase: one ring colour per phase type, with the phase name still shown as text.
@@ -38,6 +38,7 @@ Traceability:
 - **System or push notifications** — the tab-title mirror plus the chime were judged sufficient, and a permission prompt is the distraction this app avoids (`docs/idea-brief.md` §5).
 - **Surviving a reload, or the browser discarding the tab, mid-phase** — the running phase lives only in memory by core-timer's design (core-timer AC-08); if the browser throws the tab away, the phase is lost and no chime fires. Persisting a running phase would be a separate feature.
 - **Chime timing while the device sleeps or the screen is locked** — the ~1 s promise covers an awake device with the tab in the background; after a sleep, the chime plays once when the page runs again (AC-06b), never on time.
+- **The ≤ 1 s background chime on phones or in frozen tabs** — the background timing promise (AC-06) is held for desktop Chrome and desktop Firefox. On a phone with the browser in the background, or when the browser freezes the tab to save power or memory, the phase behaves as after a sleep (AC-06b): the chime plays exactly once when the page runs again, and the next phase waits for Start. Phone widths stay in scope for layout (AC-13).
 - **Coordinating two open tabs of the app** — each tab chimes and titles independently, the same accepted edge case adjustable-durations §6.1 already accepts.
 
 ## 4. User stories
@@ -77,7 +78,7 @@ Traceability:
 ### AC-01 (US-01) — happy path
 **Given** the User has pressed Start on a phase
 **When** the phase runs
-**Then** the Progress ring is full at the start, its remaining portion shrinks in step with the countdown, and it is empty at the moment of the Phase completion
+**Then** the Progress ring is full at the start, its remaining portion shrinks in step with the countdown, and it is empty at the moment of the Phase completion — the ring updates together with the countdown, once per second, with a short smooth transition between steps so it reads as a continuous sweep (reduced motion: §6)
 
 ### AC-02 (US-01) — happy path
 **Given** a phase is running
@@ -87,7 +88,7 @@ Traceability:
 ### AC-03 (US-02) — happy path
 **Given** any phase is shown, in any state
 **When** the User looks at the page
-**Then** the ring shows that phase type's own colour — different from the other two phase types — and the phase name is still shown as text, so the phase can be identified without relying on colour
+**Then** the ring shows that phase type's own colour — different from the other two phase types — and the phase name is still shown as text, so the phase can be identified without relying on colour — the text is the required way to tell the phases apart; the colour is an extra cue
 
 ### AC-04 (US-03) — happy path
 **Given** the timer is in any state
@@ -97,22 +98,22 @@ Traceability:
 ### AC-05 (US-04) — happy path
 **Given** a phase is running
 **When** it reaches a Phase completion
-**Then** a Focus completion plays the Focus-end tone, and a Short break or Long break completion plays the break-end tone — the two tones are clearly distinguishable by ear
+**Then** a Focus completion plays the Focus-end tone, and a Short break or Long break completion plays the break-end tone — the two tones are distinguishable by construction: they differ in melodic direction (one rising, one falling) or in their number of notes, and neither exceeds the §6 loudness ceiling
 
 ### AC-06 (US-05) — happy path
-**Given** a phase is running, the timer's tab is in the background, and the device stays awake — for any length of time
+**Given** a phase is running in a desktop browser (§3), the timer's tab is in the background, and the device stays awake — for any length of time
 **When** the phase reaches its Phase completion
-**Then** the Completion chime plays within about a second of that moment, and by then the tab title already shows the next phase waiting for Start
+**Then** the Completion chime plays within 1 second of that moment and never before it, and by the time it starts the tab title already shows the next phase waiting for Start
 
 ### AC-06b (US-05) — domain invariant
 **Given** a phase was running and the device slept or locked past the moment that phase would have completed
-**When** the page runs again
-**Then** the Completion chime for that phase plays exactly once, the tab title shows the next phase waiting for Start, and no further chimes follow — the next phase never starts on its own, so it cannot complete unattended
+**When** the page runs again — as soon as the page's code runs again, whether the tab is visible or still in the background
+**Then** the Completion chime for that phase plays exactly once at that moment, the tab title shows the next phase waiting for Start, and no further chimes follow — the next phase never starts on its own, so it cannot complete unattended; if sound cannot be played at that moment, AC-11 applies and the chime is not held back to play later
 
 ### AC-07 (US-04) — domain invariant
 **Given** the User is using the timer
 **When** they press Start, Pause, Resume or Reset, or commit a duration or cycle-length change
-**Then** no chime plays — the Completion chime plays only at a Phase completion, and exactly once per completion (never again when the User returns to the tab)
+**Then** no chime plays — the Completion chime plays only at a Phase completion, and exactly once per completion (never again when the User returns to the tab); a Pause or Reset pressed an instant before zero means that phase does not complete, so its chime never plays
 
 ### AC-08 (US-01) — domain invariant
 **Given** a phase is running or paused, and the User commits a new Configured duration for that same phase type
@@ -130,9 +131,9 @@ Traceability:
 **Then** the Focus-end chime plays, and that same completion is credited to the Session counter exactly as session-tracking decides (`docs/features/session-tracking/spec.md` AC-04 and AC-06) — normally today's count goes up by exactly one; a completion whose true moment fell before a midnight that has since passed still chimes but is not carried into the new day's count; a break completion chimes and never changes the Session counter
 
 ### AC-11 (US-04) — error
-**Given** sound cannot be played in the User's browser (sound unavailable or blocked)
-**When** a phase reaches its Phase completion
-**Then** the phase completes exactly as usual — Session counter, ring and tab title are unaffected and nothing breaks — and the page tells the User in plain language that the completion sound is unavailable, so they know to rely on the ring and the tab title instead
+**Given** sound cannot be played in the User's browser (sound unavailable, blocked, or silently suspended by the browser)
+**When** the User presses Start or Resume, or a phase reaches its Phase completion
+**Then** the phase runs and completes exactly as usual — Session counter, ring and tab title are unaffected and nothing breaks — and the page tells the User in plain language that the completion sound is unavailable, so they know to rely on the ring and the tab title instead; the notice appears as soon as the problem is found at Start or Resume (before the phase runs unattended) or at the completion, and stays until a later Start or Resume finds sound working. A muted operating system or unplugged speakers cannot be seen by the page and are outside this criterion
 
 ### AC-12 (US-05) — authorization
 **Given** the User has granted the page no browser permissions
@@ -142,22 +143,23 @@ Traceability:
 ### AC-13 (US-06) — happy path
 **Given** the page is shown on a phone-width screen, down to 320 CSS pixels wide
 **When** the User views any timer state, including a three-digit countdown
-**Then** the ring, countdown, phase name, controls and settings fields are all visible and usable without horizontal scrolling or overlapping
+**Then** every visible element of the page — the ring, countdown, phase name, controls, settings fields, Session counter, Task label, any validation message and the sound-unavailable notice (AC-11) — is visible and usable without horizontal scrolling or overlapping
 
 ## 6. Non-functional requirements
 
 | Aspect | Target | Measurement |
 |---|---|---|
-| Chime timing, hidden tab, awake device | ≤ 1 s after the countdown reaches zero, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check in two browsers |
-| Chime timing, visible tab | ≤ 250 ms after the countdown reaches zero | e2e |
+| Chime timing, hidden tab, awake device | ≤ 1 s after the true Phase completion moment (the phase's start plus its length, by the clock — not when the page next redraws 0:00), never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check in desktop Chrome and desktop Firefox (current stable) |
+| Chime timing, visible tab | ≤ 250 ms after the true Phase completion moment, never before it | e2e |
 | Ring vs countdown agreement | ring's remaining fraction within 1 s-equivalent of the countdown at every visible update | unit + e2e sample |
-| Tab title freshness | visible tab: shows the on-page countdown's whole minute (rounded up) within 1 s; hidden tab: correct within 1 s of a Phase completion, and at most 60 s behind while running | e2e |
-| Text contrast | ≥ 4.5:1 for normal text, ≥ 3:1 for large text (WCAG AA) on every palette colour pair in use | automated contrast check over the palette |
-| Non-text contrast | each phase's ring colour, and focus indicators, ≥ 3:1 against the background (WCAG AA) | automated contrast check over the palette |
-| Phone width | 0 px horizontal overflow at 320 CSS px, with a three-digit countdown | e2e viewport check |
+| Tab title freshness | visible tab: shows the on-page countdown's whole minute (rounded up) within 1 s; hidden tab: already shows the next phase waiting for Start when the Completion chime starts, and at most 60 s behind while running | e2e |
+| Text contrast | ≥ 4.5:1 for normal text, ≥ 3:1 for large text (WCAG AA) for all text — including placeholders, validation messages and the sound-unavailable notice; only disabled controls are exempt, as in WCAG | automated (unit) contrast check over the declared text-on-background palette token pairs |
+| Non-text contrast | each phase's ring colour, and focus indicators, ≥ 3:1 against the background; the ring's remaining arc ≥ 3:1 against its elapsed track, for each phase colour (WCAG AA) | automated contrast check over the palette |
+| Phone width | 0 px horizontal overflow at 320 CSS px, with a three-digit countdown and every notice or validation message shown | e2e viewport check |
 | Chime length | each tone ≤ 2 s, played once, never repeating | unit + e2e |
+| Chime loudness | peak output gain of each tone ≤ 0.3 of full scale | unit (over the tone definition) |
 | Self-contained | 0 network requests, 0 audio files shipped | e2e (extends the existing self-contained-load check) |
-| Reduced motion | when the User's system asks for reduced motion: 0 animated ring transitions; the ring changes at most once per second, in discrete steps | e2e with the reduced-motion preference emulated |
+| Reduced motion | when the User's system asks for reduced motion: 0 animated ring transitions — covering the depletion, the refill to full on Reset or a newly loaded phase, and the colour change between phases; the ring changes at most once per second, in discrete steps | e2e with the reduced-motion preference emulated |
 
 ## 6.1 Security / privacy
 
@@ -181,4 +183,4 @@ Traceability:
 
 - [ ] Add a mute control after all? Default now: none (§3); both ideation agents flagged it as a risk. — owner: sergii.kushnir@gmail.com, due: 2 weeks after ship
 - [ ] Should a screen reader announce a Phase completion? Default now: no live announcement; the phase name stays readable as text. — owner: Tech Lead, due: before `sdd:screens`
-- [ ] The exact character of the two tones (pitch, length, envelope)? Default now: soft, each ≤ 2 s, clearly distinguishable. — owner: sergii.kushnir@gmail.com, due: before `sdd:implement`
+- [ ] The exact character of the two tones (pitch, length, envelope)? Default now: each ≤ 2 s, within the AC-05 distinctness rule (opposite melodic direction or different note count) and the §6 loudness ceiling. — owner: sergii.kushnir@gmail.com, due: before `sdd:implement`
