@@ -194,50 +194,64 @@ a strategic choice.
 
 ## 5. Building block view
 
-<!-- 🎯 Why: INTERNAL DECOMPOSITION — modules, containers, datastores. The static topology: who
-     may talk to whom. Without §5, §6 (the flows) has no vocabulary of participants.
-     📋 Write: 1 ¶ on the style (layered / hexagonal / clean / event-driven) + a folder tree + a
-     C4Container block.
-     📌 Draw ONE Container per declared `target_surface` (frontmatter): a fullstack
-     [backend-service, web-frontend] = a backend-API container + a web/SPA container; a
-     [backend-service, mobile-app] = the API + the mobile app. The Container(web, …) line below is
-     just one surface's container — swap/add per what was declared in §4. → _shared/surfaces.md
-     📌 e.g. «web app, content API, media worker, datastore, object store, CDN». -->
-
-<One paragraph: layered / hexagonal / clean / event-driven, and why.>
+Layered, unchanged from core-timer/session-tracking: `src/logic/` (domain, extended) → `src/ui/`
+(infra, extended) → `src/main.js` (unchanged wiring). `src/logic/` still never imports `src/ui/`;
+`src/ui/` remains the only module that touches the DOM or the Web Storage API.
 
 **Internal decomposition:**
 
 ```
-<e.g. modules/<feature>/>
-├── domain/       <entities + sentinel errors>
-├── app/          <use cases / services>
-├── infra/        <repository + integration impl>
-├── ports/        <handlers, DTOs, error mapping>
-└── wiring        <self-wiring entry point>
+src/
+├── logic/
+│   └── index.js   <createTimerEngine() extended: returned object grows two new methods,
+│                   setConfiguredDurations({focus, shortBreak, longBreak}) and
+│                   setCycleLength(n) (ADR-0001) — updates the idle phase's remainingMs
+│                   immediately if the target phase type is currently idle, defers to the
+│                   next fresh start otherwise; settle()'s Long-break decision reads the
+│                   current cycle length at completion time, not a value baked in earlier
+│                   (AC-13). New pure functions, no engine-state access: per-setting stored-
+│                   value fallback validation (validateStoredDuration(raw),
+│                   validateStoredCycleLength(raw)) and input-commit validation
+│                   (validateDurationInput / validateCycleLengthInput), mirroring
+│                   validateStoredCount/validateLabelInput's existing shape.>
+├── ui/
+│   └── index.js   <mount(root, engine) extended: three duration input fields + one
+│                   cycle-length input field, each committing on blur/Enter (mirroring
+│                   commitLabel()/validateLabelInput()'s existing pattern) — a commit calls
+│                   the engine's new setConfiguredDurations/setCycleLength method, then
+│                   persistDurationConfig(storage, {...}), the second write gatekeeper
+│                   (ADR-0002). readPersistedDurationConfig(storage) added alongside
+│                   readPersistedState, run at mount, each field validated independently.>
+└── main.js        <unchanged: mount(document.getElementById('app'), createTimerEngine())>
 ```
 
-**C4 Container (L2):** <!-- syntax → references/c4-mermaid-syntax.md. Real names, no <placeholder> stubs. ONE Container per declared target_surface (frontmatter); the web container below is one example surface. -->
+**C4 Container (L2):** still one `Container` for the declared `web-frontend` surface — unchanged
+shape from session-tracking's, since this feature adds no new datastore, only new data inside the
+same local storage.
 
 ```mermaid
 C4Container
-    title <feature> — Containers
+    title adjustable-durations — Containers
 
-    Person(actor, "<Actor>")
+    Person(user, "User")
 
-    Container_Boundary(app, "<Our system>") {
-        Container(web, "<Web/UI>", "<technology>", "<purpose>")
-        Container(api, "<API/handler>", "<technology>", "<purpose>")
-        ContainerDb(db, "<Datastore>", "<technology>", "<purpose>")
+    Container_Boundary(app, "Pomodoro timer (index.html)") {
+        Container(logic, "Timer engine", "JS module (pure, no DOM)", "Phase/cycle state machine; wall-clock deadline math; runtime-configurable durations + cycle length (ADR-0001); exposes true Focus-completion timestamps")
+        Container(ui, "UI layer", "JS module (DOM + Web Storage)", "Renders phase/countdown/label/count/duration fields/cycle-length field; wires controls + all inputs; owns all local-storage reads/writes through two gatekeeper functions (ADR-0002, session-tracking's ADR-0002)")
     }
 
-    System_Ext(ext, "<External>", "<purpose>")
+    ContainerDb(storage, "Browser local storage", "Web Storage API", "Daily completed-session count, its calendar date, the last task label, three Configured durations, and the Configured cycle length")
 
-    Rel(actor, web, "<interaction>", "<protocol>")
-    Rel(web, api, "<calls>")
-    Rel(api, db, "<reads/writes>", "<driver>")
-    Rel(api, ext, "<emits>", "<protocol>")
+    Rel(user, ui, "Clicks/keyboard-activates controls; types durations/cycle length/label; reads phase, countdown, label, count", "DOM events")
+    Rel(ui, logic, "start(now) / pause(now) / reset(now) / getSnapshot(now) / setConfiguredDurations(...) / setCycleLength(n)", "direct function calls")
+    Rel(ui, storage, "Reads on load; writes on duration commit, cycle-length commit, Focus completion, label commit, or daily rollover", "Web Storage API")
 ```
+
+The Containers view keeps the same two-module split session-tracking already drew — the Timer engine
+(pure logic) and the UI layer (DOM + storage) inside one boundary, one shared local-storage box
+outside it. What's new: the engine gains two more callable methods, and the storage box now holds
+three more scalars (three durations + cycle length) alongside the existing count/date/label, still
+written through two separate gatekeeper functions rather than one merged writer.
 
 ## 6. Runtime view
 
