@@ -350,3 +350,35 @@ describe('syncConfigFromStorage (adjustable-durations T5/T7)', () => {
     assert.equal(engine.getSnapshot(0).remainingMs, 25 * MIN);
   });
 });
+
+// adjustable-durations T7 (ADR-0002, spec.md AC-06/AC-08/AC-12): persistDurationConfig
+// may be called only by its three legitimate triggers, and the pre-start correction
+// must run before every Start.
+describe('duration write-guard call sites (adjustable-durations T7)', () => {
+  const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src');
+  const uiContents = readFileSync(path.join(srcDir, 'ui/index.js'), 'utf8');
+
+  test('persistDurationConfig is called only from commitDuration, commitCycleLength and readPersistedDurationConfig', () => {
+    const callSites = (uiContents.match(/\bpersistDurationConfig\(/g) || []).length - 1; // minus the declaration
+    assert.equal(callSites, 3);
+    for (const trigger of ['commitDuration', 'commitCycleLength', 'readPersistedDurationConfig']) {
+      const from = uiContents.indexOf('function ' + trigger);
+      assert.notEqual(from, -1, trigger + ' not found');
+      const next = uiContents.indexOf('persistDurationConfig(', from);
+      // the call must come before the next function declaration (any indentation) after this one starts
+      const after = uiContents.slice(from + 1).search(/\n\s*(export )?function /);
+      const limit = after === -1 ? uiContents.length : from + 1 + after;
+      assert.equal(next !== -1 && next < limit, true, trigger + ' does not call persistDurationConfig');
+    }
+  });
+
+  test('the Start handler runs the pre-start correction before starting the engine', () => {
+    const handler = uiContents.match(/startBtn\.addEventListener\('click', \(\) => \{([\s\S]*?)\n {2}\}\);/);
+    assert.notEqual(handler, null, 'Start click handler not found');
+    const body = handler[1];
+    const correction = body.indexOf('refreshConfigFromStorage()');
+    const start = body.indexOf('engine.start(');
+    assert.notEqual(correction, -1, 'Start handler does not run the pre-start correction');
+    assert.equal(correction < start, true, 'pre-start correction must run before engine.start');
+  });
+});

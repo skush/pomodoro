@@ -11,7 +11,7 @@
 | T4 | Add persistDurationConfig / readPersistedDurationConfig as the second storage gatekeeper | infra | sergii.kushnir@gmail.com | M | T3 | done |
 | T5 | Add the three duration fields (Numeric setting field) with commit on blur/Enter and inline validation | ui | sergii.kushnir@gmail.com | M | T1, T3, T4 | done |
 | T6 | Add the cycle-length field with commit on blur/Enter and inline validation | ui | sergii.kushnir@gmail.com | S | T2, T3, T4, T5 | done |
-| T7 | Wire load-time and pre-start correction of stored durations and cycle length | ui | sergii.kushnir@gmail.com | S | T5, T6 | todo |
+| T7 | Wire load-time and pre-start correction of stored durations and cycle length | ui | sergii.kushnir@gmail.com | S | T5, T6 | done |
 | T8 | Reserve fixed width for a 3-digit minute countdown so no control shifts | ui | sergii.kushnir@gmail.com | S | T5 | todo |
 | T9 | Rebuild index.html and run the manual NFR checks | wiring | sergii.kushnir@gmail.com | S | T7, T8 | todo |
 | T10 | Add a dev-only headless-browser harness for e2e-through-UI tests | tests | sergii.kushnir@gmail.com | S | — | todo |

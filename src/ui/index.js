@@ -412,7 +412,18 @@ export function mount(root, engine) {
     }
   }
 
+  // adjustable-durations T7 (spec.md AC-06/AC-12, sad.md §6 Flow 3): the pre-start
+  // correction — re-reads storage through the same path mount() used, so an invalid
+  // value that appeared between load and Start is corrected (and written back)
+  // before the phase begins, and the fields show the values now in effect.
+  function refreshConfigFromStorage() {
+    config = syncConfigFromStorage(storage, engine);
+    for (const { key, field } of durationFields) field.setValue(config[key]);
+    cycleLengthField.setValue(config.cycleLength);
+  }
+
   startBtn.addEventListener('click', () => {
+    refreshConfigFromStorage();
     engine.start(Date.now());
     render();
     refocusIfStranded(startBtn, pauseBtn);
