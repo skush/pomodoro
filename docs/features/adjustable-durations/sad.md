@@ -298,7 +298,7 @@ sequenceDiagram
             UI-->>User: idle display shows the new duration now (AC-03)
         else phase X is running or paused
             Note over Engine: remainingMs/deadlineAt for the active phase untouched (AC-04/AC-05)
-            UI-->>User: countdown/frozen time unchanged; new value applies at the next fresh start
+            UI-->>User: countdown/frozen time unchanged, new value applies at the next fresh start
         end
         UI->>Storage: persistDurationConfig(storage, {all four current values}) (ADR-0002)
         Note over UI: in-cycle focus count and today's completed-session count left untouched (AC-07)
