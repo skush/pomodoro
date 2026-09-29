@@ -5,7 +5,7 @@
 
 | # | Task | Layer | Owner | Estimate | Blocked by | Status |
 |---|---|---|---|---|---|---|
-| T1 | Make the engine's three phase durations configurable at runtime, with idle vs running/paused semantics | domain | sergii.kushnir@gmail.com | M | — | todo |
+| T1 | Make the engine's three phase durations configurable at runtime, with idle vs running/paused semantics | domain | sergii.kushnir@gmail.com | M | — | done |
 | T2 | Make the engine's cycle length configurable and read it at completion time | domain | sergii.kushnir@gmail.com | S | T1 | todo |
 | T3 | Add pure duration/cycle-length input and stored-value validation functions | domain | sergii.kushnir@gmail.com | S | — | todo |
 | T4 | Add persistDurationConfig / readPersistedDurationConfig as the second storage gatekeeper | infra | sergii.kushnir@gmail.com | M | T3 | todo |

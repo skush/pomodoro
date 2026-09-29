@@ -9,32 +9,33 @@ export const PHASES = Object.freeze({
   LONG_BREAK: 'long_break',
 });
 
-const FOCUS_DURATION_MS = 25 * 60 * 1000;
-const SHORT_BREAK_DURATION_MS = 5 * 60 * 1000;
-const LONG_BREAK_DURATION_MS = 15 * 60 * 1000;
-const FOCUS_SESSIONS_PER_CYCLE = 4;
+const MS_PER_MINUTE = 60 * 1000;
 
-function durationFor(phase) {
-  switch (phase) {
-    case PHASES.SHORT_BREAK:
-      return SHORT_BREAK_DURATION_MS;
-    case PHASES.LONG_BREAK:
-      return LONG_BREAK_DURATION_MS;
-    case PHASES.FOCUS:
-    default:
-      return FOCUS_DURATION_MS;
-  }
+// adjustable-durations: classic defaults, in whole minutes — the fallback for any
+// missing/invalid stored value (validateStoredDuration) and the engine's initial config.
+export const DEFAULT_DURATIONS_MIN = Object.freeze({ focus: 25, shortBreak: 5, longBreak: 15 });
+
+const DURATION_KEY_FOR_PHASE = {
+  [PHASES.FOCUS]: 'focus',
+  [PHASES.SHORT_BREAK]: 'shortBreak',
+  [PHASES.LONG_BREAK]: 'longBreak',
+};
+
+function isPositiveNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
-// Clamps a deadline-minus-now reading to [0, full duration]. Without the upper
-// clamp, a backward wall-clock jump (manual change, NTP correction) while a
-// phase is running would show more than the phase's own full duration.
-function clampRemaining(phase, remainingMs) {
-  return Math.min(durationFor(phase), Math.max(0, remainingMs));
+// Clamps a deadline-minus-now reading to [0, the phase's pinned full duration].
+// Without the upper clamp, a backward wall-clock jump (manual change, NTP
+// correction) while a phase is running would show more than the phase's own full
+// duration.
+function clampRemaining(fullMs, remainingMs) {
+  return Math.min(fullMs, Math.max(0, remainingMs));
 }
 
-// createTimerEngine() -> { start, pause, reset, getSnapshot } is the module's only
-// stateful export (AC-03: the engine only ever changes in response to these four
+// createTimerEngine() -> { start, pause, reset, getSnapshot, setConfiguredDurations,
+// setCycleLength } is the module's only
+// stateful export (AC-03: the engine only ever changes in response to these
 // methods, called only by src/ui/, never from a 'message' listener or any other
 // input source). Other exports (PHASES, controlStates, formatDuration) are frozen
 // constants or pure functions with no access to engine state, so they cannot
@@ -43,8 +44,20 @@ export function createTimerEngine() {
   let phase = PHASES.FOCUS;
   let running = false;
   let deadlineAt = null;
-  let remainingMs = durationFor(phase);
+  // adjustable-durations: the live Configured durations (minutes) — read only when a
+  // phase starts fresh. A started phase keeps `phaseFullMs`, the full duration
+  // pinned when it entered its idle state, so a later commit never touches it.
+  const configured = { ...DEFAULT_DURATIONS_MIN };
+  function configuredMs(forPhase) {
+    return configured[DURATION_KEY_FOR_PHASE[forPhase]] * MS_PER_MINUTE;
+  }
+  let phaseFullMs = configuredMs(phase);
+  let remainingMs = phaseFullMs;
+  // false while the phase is idle (never started since it began or was reset);
+  // true once started, running or paused. Only an idle phase follows live config.
+  let phaseStarted = false;
   let focusCount = 0;
+  const cycleLength = 4; // T2 makes this configurable
   // session-tracking ADR-0001: the true wall-clock moment a Focus phase's deadline
   // passed, latched here (not in getSnapshot) so it survives regardless of which
   // public method's settle() call detects the transition. getSnapshot() consumes
@@ -63,7 +76,7 @@ export function createTimerEngine() {
     }
     phase =
       phase === PHASES.FOCUS
-        ? focusCount >= FOCUS_SESSIONS_PER_CYCLE
+        ? focusCount >= cycleLength
           ? PHASES.LONG_BREAK
           : PHASES.SHORT_BREAK
         : PHASES.FOCUS;
@@ -73,7 +86,9 @@ export function createTimerEngine() {
 
     running = false;
     deadlineAt = null;
-    remainingMs = durationFor(phase);
+    phaseStarted = false;
+    phaseFullMs = configuredMs(phase);
+    remainingMs = phaseFullMs;
   }
 
   function start(now) {
@@ -81,12 +96,13 @@ export function createTimerEngine() {
     if (running) return; // AC-01b: already running — no-op, no reset
     deadlineAt = now + remainingMs;
     running = true;
+    phaseStarted = true;
   }
 
   function pause(now) {
     settle(now);
     if (!running) return; // AC-02b: not running — no-op
-    remainingMs = clampRemaining(phase, deadlineAt - now);
+    remainingMs = clampRemaining(phaseFullMs, deadlineAt - now);
     running = false;
     deadlineAt = null;
   }
@@ -95,12 +111,30 @@ export function createTimerEngine() {
     settle(now);
     running = false;
     deadlineAt = null;
-    remainingMs = durationFor(phase);
+    phaseStarted = false;
+    phaseFullMs = configuredMs(phase);
+    remainingMs = phaseFullMs;
+  }
+
+  // adjustable-durations (spec.md AC-03/04/04b/05/07): stores the new Configured
+  // durations (whole minutes; a missing or non-positive value keeps its current
+  // setting — validation proper lives in the UI/validators). An idle phase shows the
+  // new value at once; a running or paused phase is untouched and picks it up at
+  // its next fresh start. Never touches focusCount.
+  function setConfiguredDurations(next) {
+    if (next === null || typeof next !== 'object') return;
+    for (const key of Object.keys(configured)) {
+      if (isPositiveNumber(next[key])) configured[key] = next[key];
+    }
+    if (!phaseStarted) {
+      phaseFullMs = configuredMs(phase);
+      remainingMs = phaseFullMs;
+    }
   }
 
   function getSnapshot(now) {
     settle(now);
-    const remaining = running ? clampRemaining(phase, deadlineAt - now) : remainingMs;
+    const remaining = running ? clampRemaining(phaseFullMs, deadlineAt - now) : remainingMs;
     const consumedCompletion = justCompletedFocusAt;
     justCompletedFocusAt = null;
     return Object.freeze({
@@ -112,7 +146,7 @@ export function createTimerEngine() {
     });
   }
 
-  return Object.freeze({ start, pause, reset, getSnapshot });
+  return Object.freeze({ start, pause, reset, getSnapshot, setConfiguredDurations });
 }
 
 // Pure control-enablement mapping (AC-02): the Pause control is disabled

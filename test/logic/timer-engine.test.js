@@ -69,7 +69,7 @@ describe('engine surface (AC-03)', () => {
     const engine = createTimerEngine();
     assert.deepEqual(
       Object.keys(engine).sort(),
-      ['getSnapshot', 'pause', 'reset', 'start'],
+      ['getSnapshot', 'pause', 'reset', 'setConfiguredDurations', 'start'],
     );
     assert.equal(Object.isFrozen(engine), true);
   });
@@ -393,5 +393,113 @@ describe('justCompletedFocusAt (session-tracking T1, ADR-0001)', () => {
     engine.start(FOCUS + 1);
     const afterBreak = engine.getSnapshot(FOCUS + 1 + SHORT + 1); // Short break completes
     assert.equal(afterBreak.justCompletedFocusAt, null);
+  });
+});
+
+// adjustable-durations T1 (spec.md AC-03/AC-04/AC-04b/AC-05/AC-07): durations are
+// configurable in whole minutes; a started (running or paused) phase keeps the full
+// duration pinned at its own start, and only an idle phase follows the live config.
+describe('setConfiguredDurations (adjustable-durations T1)', () => {
+  test('AC-03: an idle phase shows the new duration immediately', () => {
+    const engine = createTimerEngine();
+    engine.setConfiguredDurations({ focus: 50, shortBreak: 5, longBreak: 15 });
+    const snap = engine.getSnapshot(0);
+    assert.equal(snap.running, false);
+    assert.equal(snap.remainingMs, 50 * MIN);
+  });
+
+  test('AC-04: a running phase keeps its remaining time and deadline byte-for-byte', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    const before = engine.getSnapshot(60 * 1000).remainingMs;
+    engine.setConfiguredDurations({ focus: 50, shortBreak: 5, longBreak: 15 });
+    assert.equal(engine.getSnapshot(60 * 1000).remainingMs, before);
+    assert.equal(engine.getSnapshot(120 * 1000).remainingMs, FOCUS - 120 * 1000);
+  });
+
+  test('AC-04: lowering the duration below the elapsed time does not complete the running phase', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.setConfiguredDurations({ focus: 1, shortBreak: 5, longBreak: 15 });
+    const snap = engine.getSnapshot(10 * MIN);
+    assert.equal(snap.phase, PHASES.FOCUS);
+    assert.equal(snap.running, true);
+    assert.equal(snap.remainingMs, FOCUS - 10 * MIN);
+  });
+
+  test('AC-04: a running phase never displays more than the duration it started with', () => {
+    const engine = createTimerEngine();
+    engine.start(1000);
+    engine.setConfiguredDurations({ focus: 50, shortBreak: 5, longBreak: 15 });
+    // backward clock jump: still clamped to the pinned 25 min, not the new 50
+    assert.equal(engine.getSnapshot(0).remainingMs, FOCUS);
+  });
+
+  test('AC-05: a paused phase with partially elapsed time keeps its frozen remainingMs', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.pause(7 * MIN);
+    const frozen = engine.getSnapshot(7 * MIN).remainingMs;
+    assert.equal(frozen, FOCUS - 7 * MIN);
+    engine.setConfiguredDurations({ focus: 90, shortBreak: 5, longBreak: 15 });
+    assert.equal(engine.getSnapshot(8 * MIN).remainingMs, frozen);
+    engine.start(9 * MIN);
+    assert.equal(engine.getSnapshot(9 * MIN + 1000).remainingMs, frozen - 1000);
+  });
+
+  test('AC-05: a phase paused at the same instant it started is still paused, not idle', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.pause(0);
+    engine.setConfiguredDurations({ focus: 90, shortBreak: 5, longBreak: 15 });
+    assert.equal(engine.getSnapshot(0).remainingMs, FOCUS);
+  });
+
+  test('AC-04b: Reset after a running/paused change shows the current configured duration', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.setConfiguredDurations({ focus: 50, shortBreak: 5, longBreak: 15 });
+    engine.reset(MIN);
+    const snap = engine.getSnapshot(MIN);
+    assert.equal(snap.running, false);
+    assert.equal(snap.remainingMs, 50 * MIN);
+  });
+
+  test('a commit for a phase type that is not current applies at its next fresh start', () => {
+    const engine = createTimerEngine();
+    engine.setConfiguredDurations({ focus: 25, shortBreak: 10, longBreak: 15 });
+    assert.equal(engine.getSnapshot(0).remainingMs, FOCUS);
+    engine.start(0);
+    assert.equal(engine.getSnapshot(FOCUS).phase, PHASES.SHORT_BREAK);
+    assert.equal(engine.getSnapshot(FOCUS).remainingMs, 10 * MIN);
+  });
+
+  test('a new phase after completion starts at its configured duration and runs for exactly that long', () => {
+    const engine = createTimerEngine();
+    engine.setConfiguredDurations({ focus: 1, shortBreak: 2, longBreak: 3 });
+    engine.start(0);
+    assert.equal(engine.getSnapshot(MIN).phase, PHASES.SHORT_BREAK);
+    engine.start(MIN);
+    assert.equal(engine.getSnapshot(MIN + 2 * MIN - 1).phase, PHASES.SHORT_BREAK);
+    assert.equal(engine.getSnapshot(MIN + 2 * MIN).phase, PHASES.FOCUS);
+  });
+
+  test('AC-07: a commit leaves the in-cycle focus count untouched', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(FOCUS); // completes one Focus
+    const before = engine.getSnapshot(FOCUS).focusCount;
+    engine.setConfiguredDurations({ focus: 50, shortBreak: 1, longBreak: 2 });
+    assert.equal(before, 1);
+    assert.equal(engine.getSnapshot(FOCUS).focusCount, 1);
+  });
+
+  test('invalid values are ignored fail-soft, keeping the current configuration', () => {
+    const engine = createTimerEngine();
+    assert.doesNotThrow(() =>
+      engine.setConfiguredDurations({ focus: 0, shortBreak: 'abc', longBreak: -3 }),
+    );
+    assert.doesNotThrow(() => engine.setConfiguredDurations(undefined));
+    assert.equal(engine.getSnapshot(0).remainingMs, FOCUS);
   });
 });
