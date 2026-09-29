@@ -15,10 +15,11 @@ export default [
     },
   },
   {
-    files: ['test/**/*.js', 'scripts/**/*.js'],
+    files: ['test/**/*.js', 'test-e2e/**/*.js', 'scripts/**/*.js'],
     languageOptions: {
       globals: {
         console: 'readonly',
+        process: 'readonly',
       },
     },
   },
