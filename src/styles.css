@@ -54,6 +54,12 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--accent);
+  /* adjustable-durations: reserve fixed width for the widest reading ("180:00", 6
+     glyphs; tabular digits are 1ch each, the colon is narrower) so no control moves
+     when the minutes drop from 3 digits to 2 (100:00 -> 99:59). */
+  width: 6ch;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .timer-controls {
