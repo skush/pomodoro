@@ -16,15 +16,22 @@ const MS_PER_MINUTE = 60 * 1000;
 export const DEFAULT_DURATIONS_MIN = Object.freeze({ focus: 25, shortBreak: 5, longBreak: 15 });
 export const DEFAULT_CYCLE_LENGTH = 4;
 
+// adjustable-durations: the valid ranges (spec.md AC-02/AC-11, §6 NFR bounds) — shared
+// by the input/stored validators below and enforced again by the engine's own setters.
+const DURATION_MIN_MINUTES = 1;
+const DURATION_MAX_MINUTES = 180;
+const CYCLE_LENGTH_MIN = 2;
+const CYCLE_LENGTH_MAX = 8;
+
+function isWholeNumberInRange(value, min, max) {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
 const DURATION_KEY_FOR_PHASE = {
   [PHASES.FOCUS]: 'focus',
   [PHASES.SHORT_BREAK]: 'shortBreak',
   [PHASES.LONG_BREAK]: 'longBreak',
 };
-
-function isPositiveNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0;
-}
 
 // Clamps a deadline-minus-now reading to [0, the phase's pinned full duration].
 // Without the upper clamp, a backward wall-clock jump (manual change, NTP
@@ -35,12 +42,13 @@ function clampRemaining(fullMs, remainingMs) {
 }
 
 // createTimerEngine() -> { start, pause, reset, getSnapshot, setConfiguredDurations,
-// setCycleLength } is the module's only
-// stateful export (AC-03: the engine only ever changes in response to these
-// methods, called only by src/ui/, never from a 'message' listener or any other
-// input source). Other exports (PHASES, controlStates, formatDuration) are frozen
-// constants or pure functions with no access to engine state, so they cannot
-// widen the guard (ADR-0002).
+// setCycleLength } is the module's only stateful export (AC-03: the engine only ever
+// changes in response to these methods, called only by src/ui/, never from a
+// 'message'/'storage' listener or any other input source). Every other export —
+// PHASES, DEFAULT_DURATIONS_MIN, DEFAULT_CYCLE_LENGTH, controlStates, formatDuration,
+// the date/count helpers and the input/stored-value validators — is a frozen constant
+// or a pure function with no access to engine state, so none can widen the guard
+// (ADR-0002).
 export function createTimerEngine() {
   let phase = PHASES.FOCUS;
   let running = false;
@@ -120,14 +128,17 @@ export function createTimerEngine() {
   }
 
   // adjustable-durations (spec.md AC-03/04/04b/05/07): stores the new Configured
-  // durations (whole minutes; a missing or non-positive value keeps its current
-  // setting — validation proper lives in the UI/validators). An idle phase shows the
-  // new value at once; a running or paused phase is untouched and picks it up at
-  // its next fresh start. Never touches focusCount.
+  // durations. Any value that is not a whole number of minutes in 1–180 keeps its
+  // current setting (fail-soft) — the engine enforces the bounds itself so no caller
+  // can make a phase shorter than its valid minimum (AC-06). An idle phase shows the
+  // new value at once; a running or paused phase is untouched and picks it up at its
+  // next fresh start. Never touches focusCount.
   function setConfiguredDurations(next) {
     if (next === null || typeof next !== 'object') return;
     for (const key of Object.keys(configured)) {
-      if (isPositiveNumber(next[key])) configured[key] = next[key];
+      if (isWholeNumberInRange(next[key], DURATION_MIN_MINUTES, DURATION_MAX_MINUTES)) {
+        configured[key] = next[key];
+      }
     }
     if (!phaseStarted) {
       phaseFullMs = configuredMs(phase);
@@ -136,10 +147,10 @@ export function createTimerEngine() {
   }
 
   // adjustable-durations (spec.md AC-07/AC-10/AC-13): stores the new cycle length and
-  // nothing else — no retroactive Long break, focusCount untouched. A non-positive
-  // integer is ignored fail-soft (range validation lives in the UI/validators).
+  // nothing else — no retroactive Long break, focusCount untouched. Anything that is
+  // not a whole number in 2–8 is ignored fail-soft.
   function setCycleLength(n) {
-    if (Number.isInteger(n) && n > 0) cycleLength = n;
+    if (isWholeNumberInRange(n, CYCLE_LENGTH_MIN, CYCLE_LENGTH_MAX)) cycleLength = n;
   }
 
   function getSnapshot(now) {
@@ -150,6 +161,9 @@ export function createTimerEngine() {
     return Object.freeze({
       phase,
       running,
+      // adjustable-durations: true while the phase is fresh (not started since it
+      // began or was reset) — lets the UI tell a fresh Start from a Resume.
+      idle: !phaseStarted,
       remainingMs: remaining,
       focusCount,
       justCompletedFocusAt: consumedCompletion,
@@ -252,10 +266,6 @@ export function applyCountUpdate(state, now, justCompletedFocusAt) {
   return { trackedDate, count };
 }
 
-const DURATION_MIN_MINUTES = 1;
-const DURATION_MAX_MINUTES = 180;
-const CYCLE_LENGTH_MIN = 2;
-const CYCLE_LENGTH_MAX = 8;
 // Strict whole number: an optional leading '-' then digits only — rejects decimals,
 // exponents, whitespace, '+', hex and any trailing text that Number() would tolerate.
 const STRICT_WHOLE_NUMBER = /^-?\d+$/;

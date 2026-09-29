@@ -1,6 +1,10 @@
-// DOM layer: renders the phase label + countdown and wires Start/Pause/Reset.
-// The only caller of the logic engine's methods (AC-03) — no other input source
-// (no window 'message' listener, nothing else) is ever wired to it.
+// DOM layer: renders the phase label + countdown, wires Start/Pause/Reset, the task
+// label, the session count, and the adjustable-durations settings fields (three
+// durations + cycle length). Owns all localStorage access, through two write
+// gatekeepers: persistState (session-tracking) and persistDurationConfig
+// (adjustable-durations). The only caller of the logic engine's methods (AC-03) — no
+// other input source (no window 'message' or 'storage' listener, nothing else) is
+// ever wired to it.
 
 import {
   formatDuration,
@@ -91,15 +95,18 @@ function acquireStorage() {
 // writes the FULL {focus, shortBreak, longBreak, cycleLength} state (minutes / count),
 // so a foreign edit to any of the four keys is overwritten, never adopted, by the
 // next legitimate write. Fail-soft like persistState: a throwing (or absent) storage
-// is swallowed and the app keeps running on its in-memory state.
+// is swallowed and the app keeps running on its in-memory state. Returns whether the
+// write succeeded, so the caller knows storage no longer matches memory (review fix #1).
 export function persistDurationConfig(storage, config) {
   try {
     storage.setItem(FOCUS_DURATION_KEY, String(config.focus));
     storage.setItem(SHORT_BREAK_DURATION_KEY, String(config.shortBreak));
     storage.setItem(LONG_BREAK_DURATION_KEY, String(config.longBreak));
     storage.setItem(CYCLE_LENGTH_KEY, String(config.cycleLength));
+    return true;
   } catch {
     // fail-soft: never throw to the User, never surface an error
+    return false;
   }
 }
 
@@ -138,6 +145,23 @@ export function syncConfigFromStorage(storage, engine) {
   engine.setConfiguredDurations(config);
   engine.setCycleLength(config.cycleLength);
   return config;
+}
+
+// adjustable-durations T7 + review fixes #1/#3 (spec.md AC-01/AC-03/AC-06/AC-08): what
+// the Start handler does before starting. Returns the config now in effect.
+// - Resume (the phase is paused, not idle) is not a fresh start: nothing is read or
+//   written, the in-memory config stands.
+// - If storage is unavailable or the last commit could not be saved, storage no
+//   longer reflects what the User committed — adopting it would silently discard
+//   that commit, so the in-memory config stands.
+// - Otherwise this is the pre-start correction: the same read-validate-correct path
+//   mount() uses.
+// `snapshot` is the last rendered snapshot — never a fresh getSnapshot() here, which
+// would consume a pending Focus-completion credit before render() could count it.
+export function prepareStart(storage, engine, config, snapshot, lastWriteOk) {
+  if (!snapshot.idle) return config;
+  if (storage === null || !lastWriteOk) return config;
+  return syncConfigFromStorage(storage, engine);
 }
 
 // adjustable-durations T5 (screens.md «Numeric setting field», sad.md §4 decision 7):
@@ -271,6 +295,8 @@ export function mount(root, engine) {
   // adjustable-durations T5 (sad.md §6 Flows 1/3): in-memory full config, seeded by
   // the same read-validate-correct path the pre-start check uses.
   let config = syncConfigFromStorage(storage, engine);
+  // review fix #1: false once a commit's write failed — storage then lags memory.
+  let lastWriteOk = true;
   const persisted = readPersistedState(storage);
   labelField.value = persisted.label;
   let lastAcceptedLabel = persisted.label;
@@ -341,7 +367,7 @@ export function mount(root, engine) {
   function commitDuration(key, value) {
     config = { ...config, [key]: value };
     engine.setConfiguredDurations(config);
-    persistDurationConfig(storage, config);
+    lastWriteOk = persistDurationConfig(storage, config);
     render();
   }
 
@@ -374,7 +400,7 @@ export function mount(root, engine) {
   function commitCycleLength(value) {
     config = { ...config, cycleLength: value };
     engine.setCycleLength(value);
-    persistDurationConfig(storage, config);
+    lastWriteOk = persistDurationConfig(storage, config);
   }
 
   const cycleLengthField = createNumericField({
@@ -390,9 +416,13 @@ export function mount(root, engine) {
   cycleGroup.append(cycleLengthField.element);
   card.append(cycleGroup);
 
+  // The snapshot render() last showed — what the User saw when they pressed Start.
+  let lastSnapshot = null;
+
   function render() {
     const now = Date.now();
     const snapshot = engine.getSnapshot(now);
+    lastSnapshot = snapshot;
     const phaseText = PHASE_LABELS[snapshot.phase] ?? snapshot.phase;
     if (label.textContent !== phaseText) label.textContent = phaseText;
     const countdownText = formatDuration(snapshot.remainingMs);
@@ -413,11 +443,12 @@ export function mount(root, engine) {
   }
 
   // adjustable-durations T7 (spec.md AC-06/AC-12, sad.md §6 Flow 3): the pre-start
-  // correction — re-reads storage through the same path mount() used, so an invalid
-  // value that appeared between load and Start is corrected (and written back)
-  // before the phase begins, and the fields show the values now in effect.
+  // correction — for a fresh start, re-reads storage through the same path mount()
+  // used, so an invalid value that appeared between load and Start is corrected (and
+  // written back) before the phase begins; prepareStart() decides when that applies.
+  // The fields then show the values now in effect.
   function refreshConfigFromStorage() {
-    config = syncConfigFromStorage(storage, engine);
+    config = prepareStart(storage, engine, config, lastSnapshot, lastWriteOk);
     for (const { key, field } of durationFields) field.setValue(config[key]);
     cycleLengthField.setValue(config.cycleLength);
   }

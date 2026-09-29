@@ -30,14 +30,26 @@ export async function launchBrowser() {
 
 // Opens a fresh browser context (isolated storage) with a controllable fake clock.
 // `storage` is seeded into localStorage ONCE, before the app's scripts run — a
-// sessionStorage marker stops the init script re-seeding on reload.
-export async function openApp(browser, { storage = {} } = {}) {
+// sessionStorage marker stops the init script re-seeding on reload. With
+// `blockDurationWrites`, every localStorage write to an adjustable-durations key
+// throws (a quota/private-mode failure), while all other keys still work.
+export async function openApp(browser, { storage = {}, blockDurationWrites = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 900, height: 900 } });
   await context.addInitScript((seed) => {
     if (window.sessionStorage.getItem('__e2e_seeded')) return;
     window.sessionStorage.setItem('__e2e_seeded', '1');
     for (const [key, value] of Object.entries(seed)) window.localStorage.setItem(key, value);
   }, storage);
+  if (blockDurationWrites) {
+    await context.addInitScript(() => {
+      const { Storage } = window;
+      const realSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function setItem(key, value) {
+        if (String(key).startsWith('adjustable-durations:')) throw new Error('QuotaExceededError');
+        return realSetItem.call(this, key, value);
+      };
+    });
+  }
   const page = await context.newPage();
   await page.clock.install({ time: START_TIME });
   await page.goto(INDEX_URL);
@@ -46,7 +58,18 @@ export async function openApp(browser, { storage = {} } = {}) {
   return { context, page, ...locators(page) };
 }
 
-function locators(page) {
+// A real, on-disk browser profile, so a test can close the whole browser and launch
+// it again on the same profile (the "close and reopen" persistence NFR). Real clock.
+export async function launchPersistent(userDataDir) {
+  const executablePath = process.env.E2E_BROWSER_PATH;
+  const channel = process.env.E2E_BROWSER_CHANNEL ?? 'msedge';
+  const context = await chromium.launchPersistentContext(userDataDir, executablePath ? { executablePath } : { channel });
+  const page = context.pages()[0] ?? (await context.newPage());
+  await page.goto(INDEX_URL);
+  return { context, page, ...locators(page) };
+}
+
+export function locators(page) {
   const field = (id) => page.locator('#' + id);
   return {
     countdown: () => page.locator('.timer-countdown').textContent(),

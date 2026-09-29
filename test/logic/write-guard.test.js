@@ -9,6 +9,7 @@ import {
   persistDurationConfig,
   readPersistedDurationConfig,
   syncConfigFromStorage,
+  prepareStart,
 } from '../../src/ui/index.js';
 import { createTimerEngine } from '../../src/logic/index.js';
 
@@ -380,5 +381,115 @@ describe('duration write-guard call sites (adjustable-durations T7)', () => {
     const start = body.indexOf('engine.start(');
     assert.notEqual(correction, -1, 'Start handler does not run the pre-start correction');
     assert.equal(correction < start, true, 'pre-start correction must run before engine.start');
+  });
+});
+
+// review fix #1/#3 (adjustable-durations AC-01/AC-03/AC-06/AC-08): the decision the
+// Start handler makes before starting — correct from storage only for a FRESH start,
+// and never let storage override an in-session commit that could not be saved.
+describe('prepareStart (adjustable-durations review fix)', () => {
+  const MIN = 60 * 1000;
+  const throwingStorage = {
+    getItem() {
+      return null;
+    },
+    setItem() {
+      throw new Error('quota exceeded');
+    },
+  };
+
+  test('persistDurationConfig reports whether the write succeeded', () => {
+    assert.equal(persistDurationConfig(recordingStorage(), CLASSIC), true);
+    assert.equal(persistDurationConfig(throwingStorage, CLASSIC), false);
+    assert.equal(persistDurationConfig(null, CLASSIC), false);
+  });
+
+  test('AC-01/AC-03: a commit that could not be saved survives Start — the phase runs the committed value', () => {
+    const engine = createTimerEngine();
+    let config = syncConfigFromStorage(throwingStorage, engine);
+    config = { ...config, focus: 50 };
+    engine.setConfiguredDurations(config);
+    const saved = persistDurationConfig(throwingStorage, config);
+    config = prepareStart(throwingStorage, engine, config, engine.getSnapshot(0), saved);
+    assert.equal(config.focus, 50);
+    engine.start(0);
+    assert.equal(engine.getSnapshot(1000).remainingMs, 50 * MIN - 1000);
+  });
+
+  test('AC-01: with storage unavailable (null), Start keeps the in-memory config', () => {
+    const engine = createTimerEngine();
+    const config = { focus: 40, shortBreak: 5, longBreak: 15, cycleLength: 4 };
+    engine.setConfiguredDurations(config);
+    assert.deepEqual(prepareStart(null, engine, config, engine.getSnapshot(0), true), config);
+    engine.start(0);
+    assert.equal(engine.getSnapshot(0).remainingMs, 40 * MIN);
+  });
+
+  test('AC-06/AC-08: Resume is not a fresh start — no storage write, stored values not adopted', () => {
+    const storage = recordingStorage();
+    const engine = createTimerEngine();
+    const config = syncConfigFromStorage(storage, engine);
+    engine.start(0);
+    engine.pause(7 * MIN);
+    storage.setItem('adjustable-durations:focus-duration', '90'); // foreign, valid
+    storage.setItem('adjustable-durations:cycle-length', 'junk'); // foreign, invalid
+    storage.writes.length = 0;
+    const next = prepareStart(storage, engine, config, engine.getSnapshot(7 * MIN), true);
+    assert.deepEqual(next, config);
+    assert.deepEqual(storage.writes, []);
+  });
+
+  test('AC-06: a fresh start with healthy storage runs the correction (invalid value fixed and written back)', () => {
+    const storage = recordingStorage();
+    const engine = createTimerEngine();
+    const config = syncConfigFromStorage(storage, engine);
+    storage.setItem('adjustable-durations:focus-duration', '0');
+    const next = prepareStart(storage, engine, config, engine.getSnapshot(0), true);
+    assert.equal(next.focus, 25);
+    assert.equal(storage.getItem('adjustable-durations:focus-duration'), '25');
+  });
+});
+
+// review fix #7 (adjustable-durations AC-08): the helpers that can write are reachable
+// only from the legitimate read points — a new caller would be a new write trigger.
+describe('duration write-guard reader call sites (adjustable-durations review fix)', () => {
+  const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src');
+  // Line comments are blanked out so a comment that merely names a helper is not
+  // mistaken for a call site.
+  const stripComments = (text) => text.replace(/\/\/.*$/gm, '');
+  const uiContents = stripComments(readFileSync(path.join(srcDir, 'ui/index.js'), 'utf8'));
+  const otherSrc = ['logic/index.js', 'main.js'].map((f) => stripComments(readFileSync(path.join(srcDir, f), 'utf8')));
+
+  // Names of the functions whose bodies contain a call to name + '('.
+  function callersOf(name) {
+    const callers = [];
+    const declaration = /function (\w+)\s*\(/g;
+    const starts = [...uiContents.matchAll(declaration)].map((m) => ({ fn: m[1], at: m.index }));
+    let index = uiContents.indexOf(name + '(');
+    while (index !== -1) {
+      const enclosing = starts.filter((s) => s.at < index).pop();
+      const isDeclaration = uiContents.slice(index - 'function '.length, index) === 'function ';
+      if (!isDeclaration) callers.push(enclosing ? enclosing.fn : '<top level>');
+      index = uiContents.indexOf(name + '(', index + 1);
+    }
+    return callers.sort();
+  }
+
+  test('readPersistedDurationConfig is called only by syncConfigFromStorage', () => {
+    assert.deepEqual(callersOf('readPersistedDurationConfig'), ['syncConfigFromStorage']);
+  });
+
+  test('syncConfigFromStorage is called only by mount (load) and prepareStart (pre-start)', () => {
+    assert.deepEqual(callersOf('syncConfigFromStorage'), ['mount', 'prepareStart']);
+  });
+
+  test('prepareStart is called only by refreshConfigFromStorage (the Start handler path)', () => {
+    assert.deepEqual(callersOf('prepareStart'), ['refreshConfigFromStorage']);
+  });
+
+  test('no other src/ module calls the duration read/write helpers', () => {
+    for (const text of otherSrc) {
+      assert.equal(/\b(readPersistedDurationConfig|syncConfigFromStorage|persistDurationConfig|prepareStart)\(/.test(text), false);
+    }
   });
 });

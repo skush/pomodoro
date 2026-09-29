@@ -3,7 +3,10 @@
 // Start/Pause/Reset — against the BUILT index.html, with a controllable fake clock.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { launchBrowser, openApp, MIN, INDEX_URL } from './helpers.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { launchBrowser, openApp, launchPersistent, locators, MIN, INDEX_URL } from './helpers.js';
 
 const FOCUS_KEY = 'adjustable-durations:focus-duration';
 const SHORT_KEY = 'adjustable-durations:short-break-duration';
@@ -108,11 +111,16 @@ test('AC-05: committing while paused keeps the frozen time; resuming counts down
   });
 });
 
-test('AC-08: a foreign write is ignored, then overwritten (never adopted) by the next legitimate write; session keys untouched', async () => {
+test('AC-08: a write from another same-origin tab is ignored, then overwritten (never adopted) by the next legitimate write; session keys untouched', async () => {
   await withApp({}, async (app) => {
     const before = await app.storage();
-    // another tab / devtools edit
-    await app.page.evaluate((key) => window.localStorage.setItem(key, '99'), LONG_KEY);
+    // review fix #2: a genuinely separate tab in the same browser context — this page
+    // receives its localStorage write as a real 'storage' event.
+    const otherTab = await app.context.newPage();
+    await otherTab.goto(INDEX_URL);
+    await otherTab.evaluate((key) => window.localStorage.setItem(key, '99'), LONG_KEY);
+    await otherTab.close();
+    await app.advance(1000); // let the app tick; nothing may react
     assert.equal(await app.longBreakField().inputValue(), '15'); // no UI reaction
     assert.equal(await app.countdown(), '25:00');
     await app.commit(app.shortBreakField(), '10');
@@ -244,4 +252,59 @@ test('NFR display width: no control shifts across 1–180 minutes or the 100:00 
     await app.commit(app.focusField(), '1');
     assert.deepEqual(await boxes(), at180);
   });
+});
+
+test('review fix #1 (AC-01/AC-03): with storage writes failing, a committed duration still governs the next Start', async () => {
+  await withApp({ blockDurationWrites: true }, async (app) => {
+    await app.commit(app.focusField(), '50');
+    assert.equal(await app.countdown(), '50:00');
+    await app.start().click();
+    await app.advance(1000);
+    assert.equal(await app.countdown(), '49:59');
+    assert.equal(await app.focusField().inputValue(), '50');
+  });
+});
+
+test('review fix #3 (AC-06/AC-08): Resume is not a fresh start — a stored change is neither adopted nor written', async () => {
+  await withApp({}, async (app) => {
+    await app.start().click();
+    await app.advance(7 * MIN);
+    await app.pause().click();
+    await app.page.evaluate((key) => window.localStorage.setItem(key, '90'), FOCUS_KEY); // foreign, valid
+    await app.page.evaluate((key) => window.localStorage.setItem(key, 'junk'), CYCLE_KEY); // foreign, invalid
+    await app.start().click(); // Resume
+    await app.advance(1000);
+    assert.equal(await app.countdown(), '17:59');
+    assert.equal(await app.focusField().inputValue(), '25');
+    assert.equal(await app.cycleLengthField().inputValue(), '4');
+    const stored = await app.storage();
+    assert.equal(stored[FOCUS_KEY], '90'); // no write on Resume
+    assert.equal(stored[CYCLE_KEY], 'junk');
+  });
+});
+
+test('NFR persistence (AC-09/AC-14): committed durations and cycle length survive a full browser close and reopen', async () => {
+  const profile = mkdtempSync(path.join(tmpdir(), 'pomodoro-e2e-'));
+  try {
+    const first = await launchPersistent(profile);
+    await first.commit(first.focusField(), '50');
+    await first.commit(first.shortBreakField(), '10');
+    await first.commit(first.longBreakField(), '20');
+    await first.commit(first.cycleLengthField(), '6');
+    await first.context.close(); // the whole browser process exits
+
+    const second = await launchPersistent(profile);
+    try {
+      const app = { ...second, ...locators(second.page) };
+      assert.equal(await app.focusField().inputValue(), '50');
+      assert.equal(await app.shortBreakField().inputValue(), '10');
+      assert.equal(await app.longBreakField().inputValue(), '20');
+      assert.equal(await app.cycleLengthField().inputValue(), '6');
+      assert.equal(await app.countdown(), '50:00');
+    } finally {
+      await second.context.close();
+    }
+  } finally {
+    rmSync(profile, { recursive: true, force: true });
+  }
 });
