@@ -77,4 +77,4 @@ flowchart LR
 | Materialize the greenfield skeleton | 2026-09-05 | `8e8e5cf` |
 | Core timer engine + controls | 2026-09-27 | [changelog](features/core-timer/CHANGELOG.md) · [review](features/core-timer/_review/review-2026-09-27.md) · `7060adb` |
 | Session tracking (task label + daily counter) | 2026-09-29 | [changelog](features/session-tracking/CHANGELOG.md) · [review](features/session-tracking/_review/review-2026-09-29.md) · `58fdc5b` |
-| Adjustable durations + cycle length | 2026-09-29 | [changelog](features/adjustable-durations/CHANGELOG.md) · [review](features/adjustable-durations/_review/review-2026-09-29.md) · PR pending |
+| Adjustable durations + cycle length | 2026-09-29 | [changelog](features/adjustable-durations/CHANGELOG.md) · [review](features/adjustable-durations/_review/review-2026-09-29.md) · `e7c77dd` |
