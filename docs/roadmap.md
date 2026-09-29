@@ -21,7 +21,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 |---|---|---|:---:|---|
 | 1 | Materialize the greenfield skeleton | `architecture-map.md` §Stack | XS | shipped |
 | 2 | [Core timer engine + controls](features/core-timer/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
-| 3 | [Session tracking (task label + daily counter)](features/session-tracking/spec.md) | `idea-brief.md` §1 Raw idea | XS | spec'd |
+| 3 | [Session tracking (task label + daily counter)](features/session-tracking/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 4 | Adjustable durations | `idea-brief.md` §7 Recommendation | XS | idea |
 | 5 | Sensory feedback (progress ring, tab-title mirror, chime, dark UI) — deferred, built last | `idea-brief.md` §1 Raw idea | S | idea |
 
@@ -77,3 +77,4 @@ flowchart LR
 |---|---|---|
 | Materialize the greenfield skeleton | 2026-09-05 | `8e8e5cf` |
 | Core timer engine + controls | 2026-09-27 | [changelog](features/core-timer/CHANGELOG.md) · [review](features/core-timer/_review/review-2026-09-27.md) · `7060adb` |
+| Session tracking (task label + daily counter) | 2026-09-29 | [changelog](features/session-tracking/CHANGELOG.md) · [review](features/session-tracking/_review/review-2026-09-29.md) · `58fdc5b` |
