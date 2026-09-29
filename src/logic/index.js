@@ -14,6 +14,7 @@ const MS_PER_MINUTE = 60 * 1000;
 // adjustable-durations: classic defaults, in whole minutes — the fallback for any
 // missing/invalid stored value (validateStoredDuration) and the engine's initial config.
 export const DEFAULT_DURATIONS_MIN = Object.freeze({ focus: 25, shortBreak: 5, longBreak: 15 });
+export const DEFAULT_CYCLE_LENGTH = 4;
 
 const DURATION_KEY_FOR_PHASE = {
   [PHASES.FOCUS]: 'focus',
@@ -57,7 +58,9 @@ export function createTimerEngine() {
   // true once started, running or paused. Only an idle phase follows live config.
   let phaseStarted = false;
   let focusCount = 0;
-  const cycleLength = 4; // T2 makes this configurable
+  // adjustable-durations: Focus sessions per cycle. Read at Focus-completion time
+  // (never at commit time), so a mid-cycle change shapes only the next decision.
+  let cycleLength = DEFAULT_CYCLE_LENGTH;
   // session-tracking ADR-0001: the true wall-clock moment a Focus phase's deadline
   // passed, latched here (not in getSnapshot) so it survives regardless of which
   // public method's settle() call detects the transition. getSnapshot() consumes
@@ -132,6 +135,13 @@ export function createTimerEngine() {
     }
   }
 
+  // adjustable-durations (spec.md AC-07/AC-10/AC-13): stores the new cycle length and
+  // nothing else — no retroactive Long break, focusCount untouched. A non-positive
+  // integer is ignored fail-soft (range validation lives in the UI/validators).
+  function setCycleLength(n) {
+    if (Number.isInteger(n) && n > 0) cycleLength = n;
+  }
+
   function getSnapshot(now) {
     settle(now);
     const remaining = running ? clampRemaining(phaseFullMs, deadlineAt - now) : remainingMs;
@@ -146,7 +156,7 @@ export function createTimerEngine() {
     });
   }
 
-  return Object.freeze({ start, pause, reset, getSnapshot, setConfiguredDurations });
+  return Object.freeze({ start, pause, reset, getSnapshot, setConfiguredDurations, setCycleLength });
 }
 
 // Pure control-enablement mapping (AC-02): the Pause control is disabled

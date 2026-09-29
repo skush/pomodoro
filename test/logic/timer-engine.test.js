@@ -69,7 +69,7 @@ describe('engine surface (AC-03)', () => {
     const engine = createTimerEngine();
     assert.deepEqual(
       Object.keys(engine).sort(),
-      ['getSnapshot', 'pause', 'reset', 'setConfiguredDurations', 'start'],
+      ['getSnapshot', 'pause', 'reset', 'setConfiguredDurations', 'setCycleLength', 'start'],
     );
     assert.equal(Object.isFrozen(engine), true);
   });
@@ -501,5 +501,136 @@ describe('setConfiguredDurations (adjustable-durations T1)', () => {
     );
     assert.doesNotThrow(() => engine.setConfiguredDurations(undefined));
     assert.equal(engine.getSnapshot(0).remainingMs, FOCUS);
+  });
+});
+
+// adjustable-durations T2 (spec.md AC-07/AC-10/AC-13): the cycle length is read at
+// Focus-completion time, against the in-cycle focus count including that completion.
+describe('setCycleLength (adjustable-durations T2)', () => {
+  // Runs one full Focus phase to completion starting at `t`; returns the snapshot
+  // taken right after it (the phase that follows) and the completion instant.
+  function completeFocus(engine, t) {
+    engine.start(t);
+    const end = t + FOCUS;
+    return { snap: engine.getSnapshot(end), end };
+  }
+  test('AC-10: with no call, a Long break follows the 4th Focus (classic behaviour)', () => {
+    const engine = createTimerEngine();
+    let t = 0;
+    let snap;
+    for (let i = 0; i < 4; i += 1) {
+      ({ snap } = completeFocus(engine, t));
+      t += FOCUS;
+      if (i < 3) {
+        assert.equal(snap.phase, PHASES.SHORT_BREAK);
+        engine.start(t); // run the Short break through to reach the next Focus
+        t += SHORT;
+        engine.getSnapshot(t);
+      }
+    }
+    assert.equal(snap.phase, PHASES.LONG_BREAK);
+  });
+
+  test('AC-13: committing alone changes nothing — phase, running state, counts', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(FOCUS); // 1 Focus done, now an idle Short break
+    const before = engine.getSnapshot(FOCUS);
+    engine.setCycleLength(2);
+    const after = engine.getSnapshot(FOCUS);
+    assert.equal(after.phase, before.phase);
+    assert.equal(after.running, before.running);
+    assert.equal(after.remainingMs, before.remainingMs);
+    assert.equal(after.focusCount, before.focusCount);
+    assert.equal(after.phase, PHASES.SHORT_BREAK);
+  });
+
+  test('AC-10: a shorter cycle length yields a Long break at the new length', () => {
+    const engine = createTimerEngine();
+    engine.setCycleLength(2);
+    let { snap } = completeFocus(engine, 0);
+    assert.equal(snap.phase, PHASES.SHORT_BREAK);
+    engine.start(FOCUS);
+    engine.getSnapshot(FOCUS + SHORT); // back to Focus
+    ({ snap } = completeFocus(engine, FOCUS + SHORT));
+    assert.equal(snap.phase, PHASES.LONG_BREAK);
+    assert.equal(snap.focusCount, 0);
+  });
+
+  test('AC-13: lowering to below the in-cycle count — next completion is a Long break (passed)', () => {
+    const engine = createTimerEngine();
+    let t = 0;
+    for (let i = 0; i < 3; i += 1) {
+      completeFocus(engine, t);
+      t += FOCUS;
+      engine.start(t);
+      t += SHORT;
+      engine.getSnapshot(t);
+    }
+    assert.equal(engine.getSnapshot(t).focusCount, 3);
+    engine.setCycleLength(2); // in-cycle count 3 already passed 2
+    assert.equal(engine.getSnapshot(t).focusCount, 3); // untouched (AC-07)
+    assert.equal(engine.getSnapshot(t).phase, PHASES.FOCUS); // no retroactive Long break
+    const { snap } = completeFocus(engine, t);
+    assert.equal(snap.phase, PHASES.LONG_BREAK);
+    assert.equal(snap.focusCount, 0);
+  });
+
+  test('AC-13: lowering to exactly the count after one more completion — reached', () => {
+    const engine = createTimerEngine();
+    let t = 0;
+    completeFocus(engine, t);
+    t += FOCUS;
+    engine.start(t);
+    t += SHORT;
+    engine.getSnapshot(t); // focusCount 1, Focus idle
+    engine.setCycleLength(2);
+    const { snap } = completeFocus(engine, t);
+    assert.equal(snap.phase, PHASES.LONG_BREAK);
+  });
+
+  test('AC-13: raising mid-cycle — Short break until the new length is reached', () => {
+    const engine = createTimerEngine();
+    let t = 0;
+    for (let i = 0; i < 3; i += 1) {
+      completeFocus(engine, t);
+      t += FOCUS;
+      engine.start(t);
+      t += SHORT;
+      engine.getSnapshot(t);
+    }
+    engine.setCycleLength(6);
+    const { snap } = completeFocus(engine, t); // 4th Focus — classic would be Long
+    assert.equal(snap.phase, PHASES.SHORT_BREAK);
+    assert.equal(snap.focusCount, 4);
+  });
+
+  test('AC-07: setCycleLength never changes focusCount', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(FOCUS);
+    engine.setCycleLength(8);
+    assert.equal(engine.getSnapshot(FOCUS).focusCount, 1);
+    engine.setCycleLength(2);
+    assert.equal(engine.getSnapshot(FOCUS).focusCount, 1);
+  });
+
+  test('invalid cycle length is ignored fail-soft', () => {
+    const engine = createTimerEngine();
+    assert.doesNotThrow(() => engine.setCycleLength(0));
+    assert.doesNotThrow(() => engine.setCycleLength('abc'));
+    assert.doesNotThrow(() => engine.setCycleLength(undefined));
+    let t = 0;
+    let snap;
+    for (let i = 0; i < 4; i += 1) {
+      ({ snap } = completeFocus(engine, t));
+      t += FOCUS;
+      if (i < 3) {
+        engine.start(t);
+        t += SHORT;
+        engine.getSnapshot(t);
+      }
+    }
+    assert.equal(snap.phase, PHASES.LONG_BREAK);
   });
 });
