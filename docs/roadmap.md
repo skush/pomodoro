@@ -23,7 +23,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | 2 | [Core timer engine + controls](features/core-timer/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 3 | [Session tracking (task label + daily counter)](features/session-tracking/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 4 | [Adjustable durations + cycle length](features/adjustable-durations/spec.md) | `idea-brief.md` §7 Recommendation | S | shipped |
-| 5 | Sensory feedback (progress ring, tab-title mirror, chime, dark UI) — deferred, built last | `idea-brief.md` §1 Raw idea | S | idea |
+| 5 | [Sensory feedback (progress ring, tab-title mirror, chime, dark UI)](features/sensory-feedback/spec.md) | `idea-brief.md` §1 Raw idea | S | spec'd |
 
 ## Not yet specified
 
