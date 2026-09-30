@@ -82,19 +82,31 @@ describe('engine surface (AC-03)', () => {
   // This is a source-level test of that structural guarantee, not a DOM test —
   // the repo has no DOM/jsdom test environment configured, and the guard is a
   // static property of the code, not a runtime race to reproduce.
-  test('no src/ file registers a window/global message listener or exposes any other input channel', () => {
-    const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src');
+  // sensory-feedback (ADR-0001 "Amends core-timer ADR-0002"): the scan is reworked, not
+  // deleted. postMessage( / onmessage are permitted in src/ui/wakeup.js ONLY (the private
+  // page<->worker channel); window/global message listeners, storage listeners and
+  // BroadcastChannel stay forbidden in every file, wakeup.js included.
+  const WAKEUP_FILE = 'src/ui/wakeup.js';
+  const forbiddenEverywhere = [
+    /addEventListener\(\s*['"]message['"]/,
+    /BroadcastChannel/,
     // review fix #2 (adjustable-durations AC-08): a same-origin tab's localStorage write
     // reaches other tabs only as a 'storage' event — forbidding that listener is what
     // makes "a foreign write never triggers app logic" a structural guarantee.
-    const forbidden = [
-      /addEventListener\(\s*['"]message['"]/,
-      /\bonmessage\b/,
-      /\bpostMessage\(/,
-      /BroadcastChannel/,
-      /addEventListener\(\s*['"]storage['"]/,
-      /\bonstorage\b/,
-    ];
+    /addEventListener\(\s*['"]storage['"]/,
+    /\bonstorage\b/,
+  ];
+  const forbiddenOutsideWakeup = [/\bonmessage\b/, /\bpostMessage\(/];
+
+  // Returns the forbidden patterns a source file matches. `relPath` is repo-relative,
+  // forward-slashed (e.g. 'src/ui/index.js').
+  function violations(relPath, contents) {
+    const patterns = relPath === WAKEUP_FILE ? forbiddenEverywhere : [...forbiddenEverywhere, ...forbiddenOutsideWakeup];
+    return patterns.filter((pattern) => pattern.test(contents)).map(String);
+  }
+
+  test('no src/ file registers a window/global message listener or exposes any other input channel', () => {
+    const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
     function scan(dir) {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -102,19 +114,27 @@ describe('engine surface (AC-03)', () => {
         if (entry.isDirectory()) {
           scan(full);
         } else if (entry.name.endsWith('.js')) {
-          const contents = readFileSync(full, 'utf8');
-          for (const pattern of forbidden) {
-            assert.equal(
-              pattern.test(contents),
-              false,
-              `${full} matches forbidden pattern ${pattern} — this would be an input channel AC-03/ADR-0002 forbid`,
-            );
-          }
+          const rel = path.relative(repoRoot, full).split(path.sep).join('/');
+          assert.deepEqual(
+            violations(rel, readFileSync(full, 'utf8')),
+            [],
+            `${rel} matches a forbidden pattern — this would be an input channel AC-03/ADR-0002 forbid`,
+          );
         }
       }
     }
 
-    scan(srcDir);
+    scan(path.join(repoRoot, 'src'));
+  });
+
+  test('the reworked scan: postMessage/onmessage only in src/ui/wakeup.js, everything else forbidden everywhere', () => {
+    assert.deepEqual(violations('src/ui/wakeup.js', 'worker.onmessage = f; self.postMessage(1);'), []);
+    assert.equal(violations('src/ui/index.js', 'worker.postMessage(1)').length, 1);
+    assert.equal(violations('src/ui/other.js', 'x.onmessage = f').length, 1);
+    assert.equal(violations('src/ui/wakeup.js', "window.addEventListener('message', f)").length, 1);
+    assert.equal(violations('src/ui/wakeup.js', 'new BroadcastChannel("x")').length, 1);
+    assert.equal(violations('src/ui/wakeup.js', "addEventListener('storage', f)").length, 1);
+    assert.equal(violations('src/logic/index.js', "addEventListener('message', f)").length, 1);
   });
 });
 

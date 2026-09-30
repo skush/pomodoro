@@ -105,3 +105,12 @@ input channel reaches the engine's control methods is unchanged.
 - Spec: [[../spec.md]] §5 AC-03, §6.1
 - SAD: [[../sad.md]] §4, §8
 - Related ADR: [[0001-wall-clock-deadline-timing]]
+
+## Amendment (sensory-feedback, 2026-09-30)
+
+The "no input channel" scan in `test/logic/timer-engine.test.js` now permits `postMessage(` and
+`onmessage` in exactly one file, `src/ui/wakeup.js`: the private page-to-worker channel of the
+wake-up clock. Window/global `message` listeners, `storage` listeners and `BroadcastChannel` remain
+forbidden in every file. No engine control method is reachable from that channel. See
+[sensory-feedback ADR-0001](../../sensory-feedback/adr/0001-wake-the-page-at-the-deadline-from-an-inline-worker.md),
+"Amends core-timer ADR-0002".
