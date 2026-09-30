@@ -21,8 +21,10 @@ import {
   validateCycleLengthInput,
   ringFraction,
   tabTitle,
+  toneFor,
 } from '../logic/index.js';
 import { createRing } from './ring.js';
+import { createChimePlayer } from './audio.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
 const LABEL_LIMIT_MESSAGE = 'Task label is limited to 100 characters.';
@@ -247,6 +249,37 @@ const RENDER_INTERVAL_MS = 250;
 const SOUND_NOTICE_TEXT =
   'The completion sound is unavailable in this browser. Follow the timer by the ring and the tab title instead.';
 
+// sensory-feedback T9 (sad.md §6 Flow 1): the Completion chime for one snapshot. A
+// snapshot carrying `justCompleted` plays that phase's tone exactly once (the engine
+// hands the record over once, ADR-0002); if the tone cannot play the notice shows and
+// nothing is held back for later (AC-11). Nothing here runs for a Start, Pause, Resume,
+// Reset or commit, because those never produce a `justCompleted` (AC-07).
+export function applyCompletionCue(snapshot, { player, setNotice }) {
+  const completed = snapshot.justCompleted;
+  if (!completed) return;
+  let played = false;
+  try {
+    played = player.play(toneFor(completed.phase)) === true;
+  } catch {
+    played = false;
+  }
+  if (!played) setNotice(true);
+}
+
+// sensory-feedback T9 (sad.md §6 Flow 2): unlock sound inside the User's own Start/Resume
+// press. Must be called synchronously from the click handler (the AudioContext
+// resume() happens inside the gesture); shows the notice now when sound is unavailable,
+// hides it when sound works. Never plays a tone (AC-07). No permission prompt (AC-12).
+export async function unlockSound(player, setNotice) {
+  let available = false;
+  try {
+    available = (await player.unlock()) === true;
+  } catch {
+    available = false;
+  }
+  setNotice(!available);
+}
+
 // sensory-feedback T8 (sad.md §6 Flow 4): the visual cues for one snapshot — the Tab
 // title mirror, then the Progress ring. Both are pure functions of the snapshot
 // (src/logic/feedback.js). Fail-soft: a cue that cannot be drawn never stops the timer.
@@ -283,6 +316,11 @@ export function mount(root, engine) {
   soundNotice.className = 'sound-notice';
   soundNotice.textContent = SOUND_NOTICE_TEXT;
   soundNotice.hidden = true;
+
+  const setNotice = (visible) => {
+    soundNotice.hidden = !visible;
+  };
+  const chimePlayer = createChimePlayer();
 
   const controls = document.createElement('div');
   controls.className = 'timer-controls';
@@ -468,13 +506,14 @@ export function mount(root, engine) {
     startBtn.disabled = startDisabled;
     pauseBtn.disabled = pauseDisabled;
     // sad.md §8 One-shot consumption: fixed order title -> ring -> chime/notice -> Session
-    // counter. (The chime/notice step is added by the completion-cue task.)
+    // counter.
     applyVisualCues(snapshot, {
       ring,
       setTitle: (text) => {
         if (document.title !== text) document.title = text;
       },
     });
+    applyCompletionCue(snapshot, { player: chimePlayer, setNotice });
     updateSessionCount(now, snapshot.justCompletedFocusAt);
   }
 
@@ -499,6 +538,9 @@ export function mount(root, engine) {
   }
 
   startBtn.addEventListener('click', () => {
+    // Start and Resume are the User's own gesture: enable sound here, before the phase
+    // runs unattended. Called synchronously so the resume() happens inside the press.
+    unlockSound(chimePlayer, setNotice);
     refreshConfigFromStorage();
     engine.start(Date.now());
     render();
