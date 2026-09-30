@@ -8,7 +8,7 @@ acs: ["AC-06"]
 files_hint: ["test-e2e/sensory-feedback-chime.e2e.js", "test-e2e/helpers.js", "docs/features/sensory-feedback/_review/manual-timing-check.md"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
-status: "todo"
+status: "done"
 origin: "review-2026-09-30 F1"
 ---
 

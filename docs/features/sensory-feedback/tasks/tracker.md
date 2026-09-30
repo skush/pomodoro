@@ -18,10 +18,10 @@
 | T11 | e2e: ring vs countdown, tab title states, 320px layout and reduced motion | tests | sergii.kushnir@gmail.com | M | T8 | done |
 | T12 | e2e: exactly-once chime, no chime on controls, hidden-tab timing, sound-unavailable notice, no permission or network | tests | sergii.kushnir@gmail.com | M | T10, T11 | done |
 | T13 | Run the manual stopwatch check in desktop Chrome and record the review checklist | docs | sergii.kushnir@gmail.com | S | T12, T14, T15 | blocked (needs a human: manual Chrome run, after T14 and T15) |
-| T14 | Review fix F1: isolate the wake-up worker in the AC-06 hidden-tab e2e and correct the timing-check doc | tests | sergii.kushnir@gmail.com | S | T12 | todo |
-| T15 | Review fix F5: fall back to the main-thread timer when the wake-up worker errors after construction | ui | sergii.kushnir@gmail.com | S | T7 | todo |
-| T16 | Review fixes F3, F4, F6: e2e for ring at completion, visible-tab chime within 250 ms, rendered ring colour per phase | tests | sergii.kushnir@gmail.com | S | T12 | todo |
-| T17 | Review fix F7: e2e for the chime and the Session counter credit on the same completion | tests | sergii.kushnir@gmail.com | S | T12 | todo |
-| T18 | Review fix F8: source scan forbidding permission-requesting APIs under src/ | tests | sergii.kushnir@gmail.com | XS | — | todo |
+| T14 | Review fix F1: isolate the wake-up worker in the AC-06 hidden-tab e2e and correct the timing-check doc | tests | sergii.kushnir@gmail.com | S | T12 | done |
+| T15 | Review fix F5: fall back to the main-thread timer when the wake-up worker errors after construction | ui | sergii.kushnir@gmail.com | S | T7 | done |
+| T16 | Review fixes F3, F4, F6: e2e for ring at completion, visible-tab chime within 250 ms, rendered ring colour per phase | tests | sergii.kushnir@gmail.com | S | T12 | done |
+| T17 | Review fix F7: e2e for the chime and the Session counter credit on the same completion | tests | sergii.kushnir@gmail.com | S | T12 | done |
+| T18 | Review fix F8: source scan forbidding permission-requesting APIs under src/ | tests | sergii.kushnir@gmail.com | XS | — | done |
 
 **Total:** 18 tasks (T14–T18 added by review 2026-09-30), ~13 person-days.

@@ -8,7 +8,7 @@ acs: ["AC-12"]
 files_hint: ["test/logic/no-permission.test.js"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "XS"
-status: "todo"
+status: "done"
 origin: "review-2026-09-30 F8"
 ---
 

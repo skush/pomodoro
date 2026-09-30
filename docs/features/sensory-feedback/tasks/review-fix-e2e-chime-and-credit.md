@@ -8,7 +8,7 @@ acs: ["AC-10"]
 files_hint: ["test-e2e/sensory-feedback-chime.e2e.js"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
-status: "todo"
+status: "done"
 origin: "review-2026-09-30 F7"
 ---
 

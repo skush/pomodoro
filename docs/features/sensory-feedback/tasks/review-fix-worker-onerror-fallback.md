@@ -8,7 +8,7 @@ acs: ["AC-06"]
 files_hint: ["src/ui/wakeup.js", "test/logic/wakeup.test.js", "index.html"]
 owner: "sergii.kushnir@gmail.com"
 estimate: "S"
-status: "todo"
+status: "done"
 origin: "review-2026-09-30 F5"
 ---
 
