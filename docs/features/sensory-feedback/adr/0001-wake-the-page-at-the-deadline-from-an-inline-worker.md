@@ -148,3 +148,16 @@ narrow carve-out:
   path this wake-up triggers); [core-timer ADR-0001](../../core-timer/adr/0001-wall-clock-deadline-timing.md);
   [core-timer ADR-0002](../../core-timer/adr/0002-structural-encapsulation-control-guard.md) (amended
   by this ADR, see "Amends core-timer ADR-0002")
+
+## Spike result (T1, 2026-09-30)
+
+- **Chromium (Microsoft Edge, headless, Playwright):** an inline Blob-URL worker starts from a
+  `file://` `index.html`, receives a message and posts one back after 50 ms, with its URL revoked
+  right after construction. Asserted by the e2e test "sensory-feedback spike" in
+  `test-e2e/durations.e2e.js`.
+- **The zero-network check** now ignores `blob:` URLs only. A positive control (a real `http:`
+  request from the page) is still counted.
+- **Firefox (current stable): not run.** No Firefox is available in the automation environment. It
+  is still open and is checked by hand in T13 together with the manual stopwatch run. If Firefox
+  refuses the Blob worker from `file://`, that becomes an amendment here, and the main-thread
+  fallback applies there.

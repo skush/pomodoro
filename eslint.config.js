@@ -11,6 +11,12 @@ export default [
         document: 'readonly',
         window: 'readonly',
         setInterval: 'readonly',
+        // sensory-feedback: browser APIs used by src/ui/ (wake-up worker, chime).
+        Worker: 'readonly',
+        Blob: 'readonly',
+        URL: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
       },
     },
   },
@@ -20,6 +26,11 @@ export default [
       globals: {
         console: 'readonly',
         process: 'readonly',
+        // page.evaluate() callbacks run in the browser.
+        fetch: 'readonly',
+        Worker: 'readonly',
+        Blob: 'readonly',
+        URL: 'readonly',
       },
     },
   },

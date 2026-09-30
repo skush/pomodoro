@@ -228,9 +228,39 @@ test('NFR self-contained load: zero network requests beyond the initial index.ht
   try {
     const page = await context.newPage();
     const urls = [];
-    page.on('request', (request) => urls.push(request.url()));
+    // sensory-feedback T1: a blob: URL (the inline wake-up worker's source) is not a
+    // network request, so it is not counted; every other URL still is.
+    page.on('request', (request) => {
+      if (!request.url().startsWith('blob:')) urls.push(request.url());
+    });
     await page.goto(INDEX_URL);
     assert.deepEqual(urls, [INDEX_URL]);
+    // Positive control: a real http request made by the page IS counted.
+    await page.evaluate(() => fetch('http://127.0.0.1:9/control').catch(() => {}));
+    assert.deepEqual(urls, [INDEX_URL, 'http://127.0.0.1:9/control']);
+  } finally {
+    await context.close();
+  }
+});
+
+test('sensory-feedback spike: an inline Blob worker starts from file:// and posts a message back', async () => {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(INDEX_URL);
+    const reply = await page.evaluate(
+      () =>
+        new Promise((resolve, reject) => {
+          const src = 'self.onmessage = (e) => setTimeout(() => self.postMessage(e.data + 1), 50);';
+          const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+          const worker = new Worker(url);
+          URL.revokeObjectURL(url);
+          worker.onmessage = (e) => resolve(e.data);
+          worker.onerror = () => reject(new Error('worker failed to start'));
+          worker.postMessage(1);
+        }),
+    );
+    assert.equal(reply, 2);
   } finally {
     await context.close();
   }
