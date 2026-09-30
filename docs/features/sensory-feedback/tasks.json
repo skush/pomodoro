@@ -243,16 +243,103 @@
       "title": "Run the manual stopwatch check in desktop Chrome and record the review checklist",
       "layer": "docs",
       "deps": [
+        "T12",
+        "T14",
+        "T15"
+      ],
+      "acs": [
+        "AC-06"
+      ],
+      "dod": "`_review/manual-timing-check.md` exists with desktop Chrome results (1 min and ≥ 30 min hidden).",
+      "files_hint": [
+        "docs/features/sensory-feedback/_review/manual-timing-check.md"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/manual-timing-check-and-review-checklist.md"
+    },
+    {
+      "id": "T14",
+      "title": "Review fix F1: isolate the wake-up worker in the AC-06 hidden-tab e2e and correct the timing-check doc",
+      "layer": "tests",
+      "deps": [
         "T12"
       ],
       "acs": [
         "AC-06"
       ],
-      "dod": "`_review/manual-timing-check.md` exists with both browsers' results.",
+      "dod": "The AC-06 hidden-tab e2e stops the render loop before the app loads (addInitScript) and a companion check proves it fails when `Worker` is deleted; `_review/manual-timing-check.md` describes the test accurately; `npm run test:e2e` passes.",
       "files_hint": [
+        "test-e2e/sensory-feedback-chime.e2e.js",
+        "test-e2e/helpers.js",
         "docs/features/sensory-feedback/_review/manual-timing-check.md"
       ],
-      "file": "docs/features/sensory-feedback/tasks/manual-timing-check-and-review-checklist.md"
+      "file": "docs/features/sensory-feedback/tasks/review-fix-isolate-worker-e2e.md"
+    },
+    {
+      "id": "T15",
+      "title": "Review fix F5: fall back to the main-thread timer when the wake-up worker errors after construction",
+      "layer": "ui",
+      "deps": [
+        "T7"
+      ],
+      "acs": [
+        "AC-06"
+      ],
+      "dod": "`worker.onerror` sets workerFailed, drops the worker and re-arms the current deadline via `setTimeoutFn`; `test/logic/wakeup.test.js` covers it with a fake worker firing onerror; `npm run build` regenerates `index.html`.",
+      "files_hint": [
+        "src/ui/wakeup.js",
+        "test/logic/wakeup.test.js",
+        "index.html"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/review-fix-worker-onerror-fallback.md"
+    },
+    {
+      "id": "T16",
+      "title": "Review fixes F3, F4, F6: e2e for ring at completion, visible-tab chime within 250 ms, rendered ring colour per phase",
+      "layer": "tests",
+      "deps": [
+        "T12"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-03",
+        "AC-05"
+      ],
+      "dod": "e2e asserts: the ring fraction just before the deadline is ≤ 1 s of the phase length (test renamed to match); the first tone starts at or after the deadline and ≤ 250 ms after it on a visible tab; the computed `.ring-arc` stroke differs pairwise for Focus, Short break and Long break (Long break reached with cycle length 1). `npm run test:e2e` passes.",
+      "files_hint": [
+        "test-e2e/sensory-feedback.e2e.js",
+        "test-e2e/sensory-feedback-chime.e2e.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/review-fix-e2e-ring-colour-timing.md"
+    },
+    {
+      "id": "T17",
+      "title": "Review fix F7: e2e for the chime and the Session counter credit on the same completion",
+      "layer": "tests",
+      "deps": [
+        "T12"
+      ],
+      "acs": [
+        "AC-10"
+      ],
+      "dod": "e2e asserts: a Focus completion plays one Focus-end chime and the counter goes up by one; a Focus started before midnight and completing after the next midnight chimes once and credits nothing to the new day; a break completion chimes and leaves the counter unchanged. `npm run test:e2e` passes.",
+      "files_hint": [
+        "test-e2e/sensory-feedback-chime.e2e.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/review-fix-e2e-chime-and-credit.md"
+    },
+    {
+      "id": "T18",
+      "title": "Review fix F8: source scan forbidding permission-requesting APIs under src/",
+      "layer": "tests",
+      "deps": [],
+      "acs": [
+        "AC-12"
+      ],
+      "dod": "A unit test scans every file under `src/` and fails on `requestPermission`, `getUserMedia`, `navigator.permissions` or `Notification(`; `npm test` passes.",
+      "files_hint": [
+        "test/logic/no-permission.test.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/review-fix-no-permission-scan.md"
     }
   ]
 }

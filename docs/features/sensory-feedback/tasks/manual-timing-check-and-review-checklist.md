@@ -2,7 +2,7 @@
 id: T13
 title: "Run the manual stopwatch check in desktop Chrome and record the review checklist"
 layer: "docs"
-deps: ["T12"]
+deps: ["T12", "T14", "T15"]
 blocks: []
 acs: ["AC-06"]
 files_hint: ["docs/features/sensory-feedback/_review/manual-timing-check.md"]
@@ -18,7 +18,7 @@ status: "todo"
 
 ## Place in the sequence
 
-- **Blocked by:** T12 — e2e: exactly-once chime, no chime on controls, hidden-tab timing, sound-unavailable notice, no permission or network · **Blocks:** none · **Wave:** 8, after its dependencies.
+- **Blocked by:** T14, T15 (review fixes), T12 — e2e: exactly-once chime, no chime on controls, hidden-tab timing, sound-unavailable notice, no permission or network · **Blocks:** none · **Wave:** 8, after its dependencies.
 - **Lane:** own lane.
 
 ## Why (user story)
@@ -29,7 +29,7 @@ status: "todo"
 >
 > — `spec.md §4, US-05, verbatim` · full text: [spec.md](../spec.md)
 
-Confirms with a real stopwatch, on the two target browsers, that a hidden-tab chime lands within 1 s of the phase end.
+Confirms with a real stopwatch, in desktop Chrome (Firefox is out of scope, spec §3), that a hidden-tab chime lands within 1 s of the phase end.
 
 ## Inlined context
 
@@ -78,5 +78,5 @@ Internal — no API surface.
 
 ## Definition of Done
 
-- [ ] `_review/manual-timing-check.md` exists with both browsers' results.
+- [ ] `_review/manual-timing-check.md` exists with desktop Chrome results (1 min and ≥ 30 min hidden).
 - [ ] Review checklist items written down.
