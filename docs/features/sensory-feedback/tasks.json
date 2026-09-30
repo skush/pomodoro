@@ -1,0 +1,258 @@
+{
+  "slug": "sensory-feedback",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Spike: confirm an inline Blob worker starts from file:// in Chrome and Firefox, and that the zero-network check ignores blob: URLs",
+      "layer": "tests",
+      "deps": [],
+      "acs": [
+        "AC-06",
+        "AC-12"
+      ],
+      "dod": "Spike result for Chrome and Firefox is written next to ADR-0001.",
+      "files_hint": [
+        "test-e2e/durations.e2e.js",
+        "test-e2e/helpers.js",
+        "docs/features/sensory-feedback/adr/0001-wake-the-page-at-the-deadline-from-an-inline-worker.md"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/spike-blob-worker-file-protocol.md"
+    },
+    {
+      "id": "T2",
+      "title": "Extend the engine snapshot with phaseFullMs and a one-shot justCompleted for every phase type",
+      "layer": "domain",
+      "deps": [],
+      "acs": [
+        "AC-05",
+        "AC-06b",
+        "AC-07",
+        "AC-08",
+        "AC-10"
+      ],
+      "dod": "Unit tests over `settle()`/`getSnapshot()` pass for every case in the table above.",
+      "files_hint": [
+        "src/logic/index.js",
+        "test/logic/timer-engine.test.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/engine-snapshot-phase-length-and-completion.md"
+    },
+    {
+      "id": "T3",
+      "title": "Add the pure cue rules: tone data, ringFraction and tabTitle",
+      "layer": "domain",
+      "deps": [
+        "T2"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-04",
+        "AC-05",
+        "AC-09"
+      ],
+      "dod": "`test/logic/feedback.test.js` passes for tones, ring fraction and title.",
+      "files_hint": [
+        "src/logic/feedback.js",
+        "src/logic/index.js",
+        "test/logic/feedback.test.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/feedback-cue-rules.md"
+    },
+    {
+      "id": "T4",
+      "title": "Add the ring, notice and focus palette tokens, reduced-motion and 320px layout rules, and a contrast unit test",
+      "layer": "ui",
+      "deps": [],
+      "acs": [
+        "AC-03",
+        "AC-13"
+      ],
+      "dod": "`test/logic/contrast.test.js` passes for all declared pairs.",
+      "files_hint": [
+        "src/styles.css",
+        "test/logic/contrast.test.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/palette-tokens-contrast-and-layout.md"
+    },
+    {
+      "id": "T5",
+      "title": "Build the Progress ring component (inline SVG track + arc)",
+      "layer": "ui",
+      "deps": [
+        "T3",
+        "T4"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03"
+      ],
+      "dod": "`createRing().update()` sets the arc length and `data-phase` as specified.",
+      "files_hint": [
+        "src/ui/ring.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/ring-component.md"
+    },
+    {
+      "id": "T6",
+      "title": "Build the audio adapter: lazy AudioContext, unlock inside Start/Resume, play a tone once",
+      "layer": "ui",
+      "deps": [
+        "T3"
+      ],
+      "acs": [
+        "AC-05",
+        "AC-07",
+        "AC-11",
+        "AC-12"
+      ],
+      "dod": "`test/logic/audio.test.js` passes with a fake context.",
+      "files_hint": [
+        "src/ui/audio.js",
+        "test/logic/audio.test.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/chime-player-and-sound-check.md"
+    },
+    {
+      "id": "T7",
+      "title": "Build the inline wake-up worker and rework the message-channel source scan",
+      "layer": "ui",
+      "deps": [
+        "T1",
+        "T2"
+      ],
+      "acs": [
+        "AC-06"
+      ],
+      "dod": "Fallback and worker paths both covered by tests; cancelled arm never fires.",
+      "files_hint": [
+        "src/ui/wakeup.js",
+        "test/logic/timer-engine.test.js",
+        "docs/features/core-timer/adr/0002-structural-encapsulation-control-guard.md"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/wakeup-worker.md"
+    },
+    {
+      "id": "T8",
+      "title": "Render the ring, Tab title mirror and sound-unavailable notice from the snapshot in mount()",
+      "layer": "ui",
+      "deps": [
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-04",
+        "AC-08",
+        "AC-09"
+      ],
+      "dod": "Manual/e2e check: title and ring change in step with the countdown in all three states (full e2e in T11).",
+      "files_hint": [
+        "src/ui/index.js",
+        "src/styles.css"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/render-ring-title-and-notice.md"
+    },
+    {
+      "id": "T9",
+      "title": "Play the chime or show the notice at completion; unlock sound in Start/Resume",
+      "layer": "ui",
+      "deps": [
+        "T6",
+        "T8"
+      ],
+      "acs": [
+        "AC-05",
+        "AC-07",
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "dod": "Unit tests over the wiring pieces that can run in Node pass; e2e in T12 asserts one chime per completion and none on controls.",
+      "files_hint": [
+        "src/ui/index.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/play-chime-and-notice-on-completion.md"
+    },
+    {
+      "id": "T10",
+      "title": "Arm the wake-up on Start/Resume and after an early wake; cancel on Pause/Reset; build",
+      "layer": "wiring",
+      "deps": [
+        "T7",
+        "T9"
+      ],
+      "acs": [
+        "AC-06",
+        "AC-06b"
+      ],
+      "dod": "`npm run build` succeeds and the committed `index.html` matches `src/`.",
+      "files_hint": [
+        "src/ui/index.js",
+        "index.html"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/arm-and-cancel-wakeup.md"
+    },
+    {
+      "id": "T11",
+      "title": "e2e: ring vs countdown, tab title states, 320px layout and reduced motion",
+      "layer": "tests",
+      "deps": [
+        "T8"
+      ],
+      "acs": [
+        "AC-13",
+        "AC-04",
+        "AC-08"
+      ],
+      "dod": "`npm run test:e2e` passes with the new file.",
+      "files_hint": [
+        "test-e2e/sensory-feedback.e2e.js",
+        "package.json"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/e2e-visual-cues.md"
+    },
+    {
+      "id": "T12",
+      "title": "e2e: exactly-once chime, no chime on controls, hidden-tab timing, sound-unavailable notice, no permission or network",
+      "layer": "tests",
+      "deps": [
+        "T10",
+        "T11"
+      ],
+      "acs": [
+        "AC-06",
+        "AC-06b",
+        "AC-07",
+        "AC-11",
+        "AC-12"
+      ],
+      "dod": "`npm run test:e2e` passes.",
+      "files_hint": [
+        "test-e2e/sensory-feedback.e2e.js",
+        "test-e2e/helpers.js"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/e2e-chime-and-hidden-tab.md"
+    },
+    {
+      "id": "T13",
+      "title": "Run the manual stopwatch check in desktop Chrome and Firefox and record the review checklist",
+      "layer": "docs",
+      "deps": [
+        "T12"
+      ],
+      "acs": [
+        "AC-06"
+      ],
+      "dod": "`_review/manual-timing-check.md` exists with both browsers' results.",
+      "files_hint": [
+        "docs/features/sensory-feedback/_review/manual-timing-check.md"
+      ],
+      "file": "docs/features/sensory-feedback/tasks/manual-timing-check-and-review-checklist.md"
+    }
+  ]
+}
