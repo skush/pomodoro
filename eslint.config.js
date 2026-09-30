@@ -28,6 +28,7 @@ export default [
         process: 'readonly',
         // page.evaluate() callbacks run in the browser.
         fetch: 'readonly',
+        getComputedStyle: 'readonly',
         Worker: 'readonly',
         Blob: 'readonly',
         URL: 'readonly',

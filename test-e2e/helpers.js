@@ -33,8 +33,21 @@ export async function launchBrowser() {
 // sessionStorage marker stops the init script re-seeding on reload. With
 // `blockDurationWrites`, every localStorage write to an adjustable-durations key
 // throws (a quota/private-mode failure), while all other keys still work.
-export async function openApp(browser, { storage = {}, blockDurationWrites = false } = {}) {
-  const context = await browser.newContext({ viewport: { width: 900, height: 900 } });
+// sensory-feedback: `viewport` and `reducedMotion` shape the context; `noAudio` removes the
+// Web Audio API before the page runs (sound unavailable); `audioSpy` replaces AudioContext
+// with a recording fake (see installAudioSpy) so a test can observe tones without hearing them.
+export async function openApp(
+  browser,
+  { storage = {}, blockDurationWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null } = {},
+) {
+  const context = await browser.newContext({ viewport, reducedMotion });
+  if (noAudio) {
+    await context.addInitScript(() => {
+      delete window.AudioContext;
+      delete window.webkitAudioContext;
+    });
+  }
+  if (audioSpy) await context.addInitScript(installAudioSpy, audioSpy);
   await context.addInitScript((seed) => {
     if (window.sessionStorage.getItem('__e2e_seeded')) return;
     window.sessionStorage.setItem('__e2e_seeded', '1');
@@ -69,11 +82,47 @@ export async function launchPersistent(userDataDir) {
   return { context, page, ...locators(page) };
 }
 
+// Runs in the page before the app: replaces AudioContext with a fake that records every
+// oscillator it is asked to start, on `window.__tones` as {frequency, at} where `at` is the
+// page's Date.now() when the oscillator was scheduled. `state` is what resume() leaves the
+// context in ('running' or 'suspended').
+export function installAudioSpy({ state = 'running' } = {}) {
+  window.__tones = [];
+  window.AudioContext = class FakeAudioContext {
+    constructor() {
+      this.state = 'suspended';
+      this.currentTime = 0;
+      this.destination = {};
+    }
+    resume() {
+      this.state = state;
+      return Promise.resolve();
+    }
+    createGain() {
+      return { connect() {}, gain: { setValueAtTime() {}, linearRampToValueAtTime() {} } };
+    }
+    createOscillator() {
+      const osc = { type: '', frequency: { value: 0 }, connect() {}, stop() {}, start() { window.__tones.push({ frequency: osc.frequency.value, at: Date.now() }); } };
+      return osc;
+    }
+  };
+}
+
 export function locators(page) {
   const field = (id) => page.locator('#' + id);
   return {
     countdown: () => page.locator('.timer-countdown').textContent(),
     phase: () => page.locator('.timer-phase').textContent(),
+    title: () => page.title(),
+    notice: () => page.locator('.sound-notice'),
+    tones: () => page.evaluate(() => window.__tones ?? []),
+    // The Progress ring's remaining fraction, read back from the rendered SVG arc.
+    ringFraction: () =>
+      page.evaluate(() => {
+        const arc = document.querySelector('.ring-arc');
+        return 1 - Number(arc.getAttribute('stroke-dashoffset')) / Number(arc.getAttribute('stroke-dasharray'));
+      }),
+    ringPhase: () => page.locator('.progress-ring').getAttribute('data-phase'),
     sessionCount: () => page.locator('.session-count').textContent(),
     start: () => page.getByRole('button', { name: 'Start' }),
     pause: () => page.getByRole('button', { name: 'Pause' }),
