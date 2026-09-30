@@ -28,7 +28,7 @@ guarantee as it is.
 
 **Top-3 quality goals (1-liners; full scenarios in §10):**
 
-1. **Background cue timeliness**: the Completion chime plays ≤ 1 s after the true Phase completion
+1. **Background cue timeliness**: the Completion chime is started ≤ 1 s after the true Phase completion
    moment (never before it) in a hidden desktop tab of an awake device, and the Tab title mirror
    already shows the next phase waiting for Start when it does.
 2. **Exactly-once, completion-only chime**: one chime per Phase completion, never on
@@ -55,6 +55,7 @@ guarantee as it is.
   extension) is outside that promise, and the chime still plays there, possibly late. A visible
   warning would be new UI the spec and `ux-flows.md` don't have. (Critic finding, 2026-09-30.)
 - Decision override (2026-09-30, owner): Firefox is excluded from the background timing promise and becomes a separate later feature (`docs/roadmap.md` step 6). The ≤ 1 s promise is verified on desktop Chrome, with Edge sharing the engine. In Firefox the chime still plays, and the ADR-0001 main-thread fallback applies if the worker cannot start.
+- Decision (2026-09-30, owner): the AC-06 timing promise is about when the page starts the chime, not when sound is audible. A real-Chrome check of a hidden tab scheduled the tone 37 ms after the deadline, while the sound was heard about 1 s later — output-device and audio start-up latency the page cannot control (`_review/manual-timing-check.md`). AC-06 and the §6 row are worded accordingly.
 - Decision override: the feature stays size S despite four new files and two new snapshot fields —
   rationale: the files are splits inside the existing `src/logic/` and `src/ui/` modules, not new
   architectural modules. The snapshot fields are an internal read-only interface between two layers
@@ -517,7 +518,7 @@ deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation
 **QG-1. Background cue timeliness**
 - **When:** a phase reaches its Phase completion while running in a desktop Chrome tab that is hidden, on an awake device, including after ≥ 30 min hidden. Also the visible
   case.
-- **Then:** hidden tab: chime "≤ 1 s after the true Phase completion moment (the phase's start plus
+- **Then:** hidden tab: "chime started ≤ 1 s after the true Phase completion moment (the phase's start plus
   its length, by the clock — not when the page next redraws 0:00), never before it, including after
   ≥ 30 min hidden". Visible tab: "≤ 250 ms after the true Phase completion moment, never before it".
   Tab title: hidden, it "already shows the next phase waiting for Start when the Completion chime

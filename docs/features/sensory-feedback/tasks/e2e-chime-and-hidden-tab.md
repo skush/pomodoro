@@ -37,7 +37,7 @@ Proves the background promise as far as automation can: one on-time chime, never
 >
 > — `sad.md §11 row 3 and §10 QG-1, abridged` · full text: [sad.md](../sad.md)
 
-> | Chime timing, hidden tab, awake device | ≤ 1 s after the true Phase completion moment …, never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check … |
+> | Chime timing, hidden tab, awake device | chime started ≤ 1 s after the true Phase completion moment …, never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check … |
 > | Chime timing, visible tab | ≤ 250 ms after the true Phase completion moment, never before it | e2e |
 >
 > — `spec.md §6, rows «Chime timing», abridged` · full text: [spec.md](../spec.md)
@@ -64,7 +64,7 @@ Internal — no API surface.
 
 > **Given** a phase is running in a desktop browser (§3), the timer's tab is in the background, and the device stays awake — for any length of time
 > **When** the phase reaches its Phase completion
-> **Then** the Completion chime plays within 1 second of that moment and never before it, and by the time it starts the tab title already shows the next phase waiting for Start
+> **Then** the Completion chime is started within 1 second of that moment and never before it — "started" meaning the page has handed the tone to the browser's audio output; how soon the sound is then audible depends on the output device and the browser's audio start-up, which the page does not control — and by the time it starts the tab title already shows the next phase waiting for Start
 >
 > — `spec.md §5, AC-06, verbatim` · full text: [spec.md](../spec.md)
 
@@ -104,7 +104,7 @@ Internal — no API surface.
 
 - [ ] Under the fake clock: observe the audio adapter (spy on the fake `AudioContext`) — exactly one tone per completion, Focus-end vs break-end, none on Start/Pause/Resume/Reset or a duration commit, none on return to the tab.
 - [ ] Sound unavailable (suspended context): notice shown at Start and at completion, no late chime.
-- [ ] Real-time run with the page hidden: chime ≤ 1 s after the true completion moment and never before it.
+- [ ] Real-time run with the page hidden: chime started ≤ 1 s after the true completion moment (page-side timestamp) and never before it.
 - [ ] Extend the zero-network/no-permission check (blob: excluded per T1).
 
 ## Edge cases

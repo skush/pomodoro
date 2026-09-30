@@ -17,7 +17,7 @@ Today the timer tells the User what is happening only through a plain text count
 
 This is the last roadmap step (`docs/roadmap.md` step 5), deliberately held until adjustable durations shipped so that everything here reads the User-configured length instead of a hardcoded one. Core-timer explicitly deferred the progress ring, the tab-title countdown, the completion chime and phase colour-coding to this step (`docs/features/core-timer/spec.md` §3 and §8).
 
-**Committed approach:** build a trustworthy eyes-off cue layer. A Completion chime with a distinct Focus-end tone and break-end tone plays within 1 s of every Phase completion — including while the tab is hidden in a desktop browser, as long as the device is awake. On the page, a Progress ring colour-coded per phase depletes against the length the phase started with. The Tab title mirror shows the remaining whole minutes and the phase, and always says whether the phase is running, paused or waiting for Start. All of it sits in one consistent dark palette that meets WCAG AA. Rationale: a ring, a tab-title countdown and a synthesized chime are common in comparable timers, but none documents distinct end tones or chime timing in a background tab — that is the gap this step owns. The sharpest failure mode is that the background promise silently fails in the very situation it exists for, so it is an explicit, scoped and tested requirement here (§5 AC-06, §6). The success criterion: a User working in another tab never misses, or misreads, a phase end.
+**Committed approach:** build a trustworthy eyes-off cue layer. A Completion chime with a distinct Focus-end tone and break-end tone is started within 1 s of every Phase completion — including while the tab is hidden in a desktop browser, as long as the device is awake. On the page, a Progress ring colour-coded per phase depletes against the length the phase started with. The Tab title mirror shows the remaining whole minutes and the phase, and always says whether the phase is running, paused or waiting for Start. All of it sits in one consistent dark palette that meets WCAG AA. Rationale: a ring, a tab-title countdown and a synthesized chime are common in comparable timers, but none documents distinct end tones or chime timing in a background tab — that is the gap this step owns. The sharpest failure mode is that the background promise silently fails in the very situation it exists for, so it is an explicit, scoped and tested requirement here (§5 AC-06, §6). The success criterion: a User working in another tab never misses, or misreads, a phase end.
 
 Traceability:
 - Resolves core-timer §8's open question on visually distinguishing the active phase: one ring colour per phase type, with the phase name still shown as text.
@@ -25,6 +25,7 @@ Traceability:
 - Decision recorded against the research: comparable timers all offer a mute or sound toggle; this step deliberately ships without one (§3), with a revisit in §8.
 - Decision recorded against `docs/idea-brief.md` §1 ("a live countdown mirrored in the browser tab title"): at the owner's call, the tab title shows whole minutes (rounded up) rather than a second-by-second countdown — the on-page countdown keeps the seconds (AC-04).
 - Decision (2026-09-30, owner): Firefox is excluded from the background timing promise for now and becomes its own later feature (§3). AC-06 and the §6 hidden-tab row are verified on desktop Chrome, with Edge sharing the engine.
+- Decision (2026-09-30, owner): the AC-06 timing promise is about when the page starts the chime, not when sound is audible. A real-Chrome check of a hidden tab scheduled the tone 37 ms after the deadline, while the sound was heard about 1 s later — output-device and audio start-up latency the page cannot control (`_review/manual-timing-check.md`). AC-06 and the §6 row are worded accordingly.
 - Decision override: critic finding that the §6 "Self-contained" row cites a manual check — rationale: an automated zero-network-requests e2e check already exists (`test-e2e/durations.e2e.js:226`), so "extends the existing self-contained-load check" is accurate.
 
 ## 2. Goals
@@ -105,7 +106,7 @@ Traceability:
 ### AC-06 (US-05) — happy path
 **Given** a phase is running in a desktop browser (§3), the timer's tab is in the background, and the device stays awake — for any length of time
 **When** the phase reaches its Phase completion
-**Then** the Completion chime plays within 1 second of that moment and never before it, and by the time it starts the tab title already shows the next phase waiting for Start
+**Then** the Completion chime is started within 1 second of that moment and never before it — "started" meaning the page has handed the tone to the browser's audio output; how soon the sound is then audible depends on the output device and the browser's audio start-up, which the page does not control — and by the time it starts the tab title already shows the next phase waiting for Start
 
 ### AC-06b (US-05) — domain invariant
 **Given** a phase was running and the device slept or locked past the moment that phase would have completed
@@ -151,7 +152,7 @@ Traceability:
 
 | Aspect | Target | Measurement |
 |---|---|---|
-| Chime timing, hidden tab, awake device | ≤ 1 s after the true Phase completion moment (the phase's start plus its length, by the clock — not when the page next redraws 0:00), never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check in desktop Chrome (current stable; Edge shares the engine) |
+| Chime timing, hidden tab, awake device | chime started ≤ 1 s after the true Phase completion moment (the phase's start plus its length, by the clock — not when the page next redraws 0:00), never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check in desktop Chrome (current stable; Edge shares the engine); measured page-side (tone-scheduling timestamp vs the deadline) — the audible delay on a given output device is recorded in `_review/manual-timing-check.md` but is not a pass/fail figure |
 | Chime timing, visible tab | ≤ 250 ms after the true Phase completion moment, never before it | e2e |
 | Ring vs countdown agreement | ring's remaining fraction within 1 s-equivalent of the countdown at every visible update | unit + e2e sample |
 | Tab title freshness | visible tab: shows the on-page countdown's whole minute (rounded up) within 1 s; hidden tab: already shows the next phase waiting for Start when the Completion chime starts, and at most 60 s behind while running | e2e |

@@ -164,7 +164,7 @@ flowchart TD
     A["SCR-01 User presses Start: this press enables sound, no permission prompt appears"] --> B["SCR-01 phase running"]
     B -->|"User switches to another tab"| C["SCR-03 any other browser tab, timer tab in the background"]
     C --> D{"Awake device, desktop Chrome or Edge, tab still running?"}
-    D -->|"yes"| E["Phase completes, chime plays within 1 s and never early"]
+    D -->|"yes"| E["Phase completes, chime is started within 1 s and never early"]
     E --> F["SCR-02 already shows the next phase marked ready"]
     F -->|"User returns to the timer tab"| K["SCR-01 next phase waiting for Start, no second chime"]
     D -->|"no: device slept or locked, phone, or tab frozen"| G["Nothing plays while the page cannot run"]
@@ -227,7 +227,7 @@ non-goal).
 | AC-03 | Flow US-02 → nodes A, C, D and their self-edges | colour per phase type plus the phase name as text, in every state |
 | AC-04 | Flow US-03 → C→D, C→E, C→F | the three tab-title states; the 60 s trailing tolerance sits on node D |
 | AC-05 | Flow US-04 → Y→F (Focus-end tone), Y→G (break-end tone) | distinctness and loudness are §6 / unit-test matters |
-| AC-06 | Flow US-05 → D→E→F | chime within 1 s, never early, title already on next phase |
+| AC-06 | Flow US-05 → D→E→F | chime started within 1 s, never early, title already on next phase |
 | AC-06b | Flow US-05 → D→G→H→I | sleep, lock, phone or frozen tab: chime once when the page runs again, no chimes after |
 | AC-07 | Flow US-04 → A→X and W→X; Flow US-05 → F→K and I→K | no chime on Start, Pause, Resume, Reset or duration commit; none again on return to the tab |
 | AC-08 | Flow US-01 → self-edges on B and C (commit while running or paused) | ring keeps the starting length; Reset → A gives the new full length |

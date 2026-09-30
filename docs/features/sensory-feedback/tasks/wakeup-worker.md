@@ -29,7 +29,7 @@ status: "todo"
 >
 > — `spec.md §4, US-05, verbatim` · full text: [spec.md](../spec.md)
 
-Provides the page-waking nudge that lets a hidden tab still chime within 1 s of the true completion moment.
+Provides the page-waking nudge that lets a hidden tab still start the chime within 1 s of the true completion moment.
 
 ## Inlined context
 
@@ -71,7 +71,7 @@ Internal — no API surface.
 
 > **Given** a phase is running in a desktop browser (§3), the timer's tab is in the background, and the device stays awake — for any length of time
 > **When** the phase reaches its Phase completion
-> **Then** the Completion chime plays within 1 second of that moment and never before it, and by the time it starts the tab title already shows the next phase waiting for Start
+> **Then** the Completion chime is started within 1 second of that moment and never before it — "started" meaning the page has handed the tone to the browser's audio output; how soon the sound is then audible depends on the output device and the browser's audio start-up, which the page does not control — and by the time it starts the tab title already shows the next phase waiting for Start
 >
 > — `spec.md §5, AC-06, verbatim` · full text: [spec.md](../spec.md)
 

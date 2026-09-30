@@ -27,7 +27,7 @@ drag into the browser). In **desktop Chrome (current stable)**:
 1. Set the Focus duration to 1 minute and press Start (this also unlocks sound).
 2. Switch to another tab, and watch the clock. Note the wall-clock second at which the phase ends
    (Start time + 60 s) and the second at which the chime starts.
-3. Record the delay. Pass = chime at or after the end and within 1 s of it.
+3. Record the delay. Pass = the page starts the chime at or after the end and within 1 s of it (page-side timestamp, see the diagnostic below). Also note the audible delay by ear and the output device — for information, not pass/fail (AC-06 wording, decided 2026-09-30).
 4. Note whether the tab strip title read "Ready · 5 min · Short break" by the time the chime played.
 5. Repeat once with a 30 min or longer hidden run (Focus 30) if practical (the spec says "including
    after ≥ 30 min hidden").
@@ -57,11 +57,9 @@ chime was scheduled in that same wake, and the title already showed the next pha
 is therefore added **after** the page plays the tone (heard about 1 s after the deadline in this same run): audio output wake-up latency (output device,
 e.g. Bluetooth or a device that sleeps when idle) plus reaction time. Output device used: fill in.
 
-Open point for the owner: AC-06 says the chime "plays within 1 second". The app meets that at the
-point it hands the tone to the browser; audible latency of the output device is outside the app.
-Decide before `ship` whether to (a) keep the wording and note the device caveat, (b) reword AC-06 to
-"is played", or (c) add an audio keep-warm step. Re-run once on built-in speakers to confirm the device
-explanation.
+Decision (owner, 2026-09-30): AC-06 and the `spec.md` §6 row now promise that the chime is *started* within
+1 s (the page hands the tone to the browser); audible latency of the output device is recorded here but
+is not a pass/fail figure. Still to do: repeat once on built-in speakers to confirm the device explanation.
 
 ## Review checklist (for `/sdd:review`)
 
