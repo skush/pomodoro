@@ -141,6 +141,63 @@ describe('createWakeup fallback (worker unavailable)', () => {
   });
 });
 
+describe('createWakeup when the worker errors after construction (review F5, AC-06)', () => {
+  function setup() {
+    const env = fakeWorkerEnv();
+    const pending = new Map();
+    let next = 1;
+    let clock = 1000;
+    let wakes = 0;
+    const wake = createWakeup(() => (wakes += 1), {
+      ...env.options,
+      setTimeoutFn: (fn, ms) => (pending.set(next, { fn, ms }), next++),
+      clearTimeoutFn: (id) => pending.delete(id),
+      now: () => clock,
+    });
+    return { env, pending, wake, wakes: () => wakes, advance: (ms) => (clock += ms) };
+  }
+
+  test('an armed deadline is re-armed on the main-thread timer with the remaining delay', () => {
+    const s = setup();
+    s.wake.arm(5000);
+    s.advance(1500);
+    s.env.workers[0].onerror({});
+    assert.equal(s.pending.size, 1);
+    assert.equal([...s.pending.values()][0].ms, 3500);
+    [...s.pending.values()][0].fn();
+    assert.equal(s.wakes(), 1);
+  });
+
+  test('later arms use the fallback and never post to the dead worker', () => {
+    const s = setup();
+    s.wake.arm(5000);
+    s.env.workers[0].onerror({});
+    const posted = s.env.workers[0].posted.length;
+    s.wake.arm(2000);
+    assert.equal(s.env.workers[0].posted.length, posted);
+    assert.equal(s.env.workers.length, 1);
+    assert.equal([...s.pending.values()].at(-1).ms, 2000);
+  });
+
+  test('an error while nothing is armed starts no timer, and a cancelled arm never fires', () => {
+    const s = setup();
+    s.wake.arm(5000);
+    s.wake.cancel();
+    s.env.workers[0].onerror({});
+    assert.equal(s.pending.size, 0);
+    assert.equal(s.wakes(), 0);
+  });
+
+  test('a wake message that arrives after the error is ignored', () => {
+    const s = setup();
+    s.wake.arm(5000);
+    const { id } = s.env.workers[0].posted[0];
+    s.env.workers[0].onerror({});
+    s.env.workers[0].wake(id);
+    assert.equal(s.wakes(), 0);
+  });
+});
+
 describe('the worker source (runs inside the Worker)', () => {
   function runWorker() {
     const timers = new Map();

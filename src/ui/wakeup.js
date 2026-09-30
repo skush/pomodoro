@@ -48,6 +48,7 @@ export function createWakeup(
     revokeObjectURL = (url) => URL.revokeObjectURL(url),
     setTimeoutFn = (fn, ms) => setTimeout(fn, ms),
     clearTimeoutFn = (id) => clearTimeout(id),
+    now = () => Date.now(),
   } = {},
 ) {
   let worker = null;
@@ -57,6 +58,8 @@ export function createWakeup(
   // that was already in flight when the User paused, reset or re-armed does nothing.
   let currentId = 0;
   let armed = false;
+  let armedAt = 0;
+  let armedDelay = 0;
 
   function ensureWorker() {
     if (worker || workerFailed) return worker;
@@ -78,11 +81,38 @@ export function createWakeup(
           onWake();
         }
       };
+      // A script that fails to load after construction (policy block, revoked blob URL)
+      // reports here, not from the constructor: drop the worker and carry on without it.
+      worker.onerror = handleWorkerError;
     } catch {
       worker = null;
       workerFailed = true;
     }
     return worker;
+  }
+
+  function handleWorkerError() {
+    if (worker) {
+      // Deaf to anything the dead worker might still post, so a late wake cannot double-fire.
+      worker.onmessage = null;
+      try {
+        worker.terminate?.();
+      } catch {
+        // already gone
+      }
+    }
+    worker = null;
+    workerFailed = true;
+    if (armed) startFallback(Math.max(0, armedDelay - (now() - armedAt)));
+  }
+
+  function startFallback(delay) {
+    clearFallback();
+    fallbackTimer = setTimeoutFn(() => {
+      fallbackTimer = null;
+      armed = false;
+      onWake();
+    }, delay);
   }
 
   function clearFallback() {
@@ -96,17 +126,14 @@ export function createWakeup(
     currentId += 1;
     armed = true;
     const delay = clampDelay(delayMs);
+    armedAt = now();
+    armedDelay = delay;
     const w = ensureWorker();
     if (w) {
       w.postMessage({ type: 'arm', delayMs: delay, id: currentId });
       return;
     }
-    clearFallback();
-    fallbackTimer = setTimeoutFn(() => {
-      fallbackTimer = null;
-      armed = false;
-      onWake();
-    }, delay);
+    startFallback(delay);
   }
 
   function cancel() {
