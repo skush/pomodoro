@@ -55,7 +55,7 @@ Timestamps logged in the page with `Date.now()` (a hook on `createOscillator`, a
 Reading: the wake-up worker brought the hidden page back 37 ms after the deadline (limit 1 s), the
 chime was scheduled in that same wake, and the title already showed the next phase. The 1–2 s heard
 is therefore added **after** the page plays the tone (heard about 1 s after the deadline in this same run): audio output wake-up latency (output device,
-e.g. Bluetooth or a device that sleeps when idle) plus reaction time. Output device used: fill in.
+e.g. Bluetooth or a device that sleeps when idle) plus reaction time. Output device used: bluetooth headset.
 
 Decision (owner, 2026-09-30): AC-06 and the `spec.md` §6 row now promise that the chime is *started* within
 1 s (the page hands the tone to the browser); audible latency of the output device is recorded here but
