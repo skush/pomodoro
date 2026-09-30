@@ -330,3 +330,6 @@ export function formatDuration(ms) {
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
+
+// sensory-feedback: the pure cue rules (tone data, ring fraction, tab-title text).
+export { TONES, toneFor, ringFraction, tabTitle } from './feedback.js';
