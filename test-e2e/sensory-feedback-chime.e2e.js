@@ -56,6 +56,18 @@ test('AC-05/AC-07: exactly one Focus-end chime (rising) per Focus completion, no
   });
 });
 
+test('§6: on a visible tab the Focus-end chime starts at the deadline and no later than 250 ms after it', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    await app.start().click();
+    const deadline = (await app.page.evaluate(() => Date.now())) + 25 * MIN; // the clock is paused: Start's instant
+    await app.advance(25 * MIN);
+    const tones = await app.tones();
+    assert.equal(tones.length, FOCUS_NOTES);
+    const lateBy = tones[0].at - deadline;
+    assert.ok(lateBy >= 0 && lateBy <= 250, `chime ${lateBy} ms after the deadline (allowed 0..250)`);
+  });
+});
+
 test('AC-05: a break completion plays the break-end tone (falling), once', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
     await app.start().click();
@@ -65,6 +77,31 @@ test('AC-05: a break completion plays the break-end tone (falling), once', async
     const tones = await app.tones();
     assert.equal(tones.length, FOCUS_NOTES + BREAK_NOTES);
     assert.ok(falling(tones.slice(FOCUS_NOTES)));
+  });
+});
+
+test('AC-10: a Focus completion plays one Focus-end chime and credits the Session counter exactly once; a break chimes and leaves it', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    assert.match(await app.sessionCount(), /: 0$/);
+    await app.start().click();
+    await app.advance(25 * MIN);
+    assert.equal((await app.tones()).length, FOCUS_NOTES);
+    assert.match(await app.sessionCount(), /: 1$/);
+    await app.start().click();
+    await app.advance(5 * MIN); // Short break completes
+    assert.equal((await app.tones()).length, FOCUS_NOTES + BREAK_NOTES); // chimed
+    assert.match(await app.sessionCount(), /: 1$/); // never changes the counter
+  });
+});
+
+test('AC-10: a Focus that completed before a midnight that has since passed still chimes once but is not credited to the new day', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    await app.page.clock.setSystemTime(new Date('2026-09-29T23:30:00'));
+    await app.start().click();
+    await app.advance(40 * MIN); // true completion 23:55, the page next looks at 00:10 on the 30th
+    assert.equal((await app.tones()).length, FOCUS_NOTES);
+    assert.equal(await app.phase(), 'Short break');
+    assert.match(await app.sessionCount(), /: 0$/); // the new day starts at zero
   });
 });
 

@@ -40,14 +40,38 @@ test('AC-01/§6: the ring agrees with the on-page countdown within 1 s at every 
   });
 });
 
-test('AC-01/AC-02: the ring is empty at the Phase completion and the next phase loads full, in its own colour', async () => {
+test('AC-01/AC-02: the ring is down to at most 1 s just before the Phase completion, and the next phase loads full, in its own colour', async () => {
   await withApp({}, async (app) => {
     assert.equal(await app.ringPhase(), 'focus');
     await app.start().click();
-    await app.advance(25 * MIN);
+    await app.advance(25 * MIN - 500); // half a second before the deadline
+    assert.equal(await app.phase(), 'Focus');
+    // The ring rounds up to whole seconds, so its last frame shows 1 s left (the §6 tolerance), never more.
+    assert.ok((await app.ringFraction()) * 25 * 60 <= 1 + 1e-6, 'ring not down to 1 s just before completion'); // 1e-6: float noise from the SVG read-back
+    await app.advance(500);
     assert.equal(await app.phase(), 'Short break');
     assert.equal(await app.ringFraction(), 1);
     assert.equal(await app.ringPhase(), 'short_break');
+  });
+});
+
+test('AC-03: the rendered ring stroke differs between Focus, Short break and Long break', async () => {
+  // reduced motion drops the 0.3 s colour transition, so the read is the settled colour
+  await withApp({ reducedMotion: 'reduce' }, async (app) => {
+    const stroke = () => app.page.evaluate(() => getComputedStyle(document.querySelector('.ring-arc')).stroke);
+    await app.commit(app.cycleLengthField(), '2'); // Focus, Short break, Focus, then the Long break
+    const focus = await stroke();
+    await app.start().click();
+    await app.advance(25 * MIN);
+    assert.equal(await app.ringPhase(), 'short_break');
+    const shortBreak = await stroke();
+    await app.start().click();
+    await app.advance(5 * MIN);
+    await app.start().click();
+    await app.advance(25 * MIN);
+    assert.equal(await app.ringPhase(), 'long_break');
+    const longBreak = await stroke();
+    assert.equal(new Set([focus, shortBreak, longBreak]).size, 3, `strokes not pairwise different: ${focus} | ${shortBreak} | ${longBreak}`);
   });
 });
 

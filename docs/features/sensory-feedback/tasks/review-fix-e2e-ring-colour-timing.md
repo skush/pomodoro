@@ -26,7 +26,7 @@ These are review findings F3, F4 and F6 ([review-2026-09-30.md](../_review/revie
 
 - [ ] F3: just before the deadline, assert that the ring fraction is ≤ 1 s of the phase length, then that the next phase starts full. Rename the test to match.
 - [ ] F4: in a fake-clock Focus completion on a visible tab, assert `tones[0].at >= deadline` and `tones[0].at - deadline <= 250`.
-- [ ] F6: read the computed `stroke` of `.ring-arc` for Focus, Short break and Long break. Reach Long break with cycle length 1. Assert the three values are pairwise different.
+- [ ] F6: read the computed `stroke` of `.ring-arc` for Focus, Short break and Long break. Reach Long break with cycle length 2 (the minimum). Assert the three values are pairwise different.
 
 ## Definition of Done
 
