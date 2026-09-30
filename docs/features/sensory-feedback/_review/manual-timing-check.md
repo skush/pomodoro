@@ -1,6 +1,6 @@
 # Manual timing check and review checklist — sensory-feedback (T13)
 
-**Status: PARTIAL — the manual run in desktop Chrome is still to do. Firefox is out of scope (deferred to a later feature).**
+**Status: PARTIAL — the 1 min run in desktop Chrome is done (app side passes; the audible delay is open, see below). The ≥ 30 min run is still to do. Firefox is out of scope (deferred to a later feature).**
 `spec.md` §6 requires "e2e with the page hidden + manual stopwatch check in desktop Chrome
 (current stable; Edge shares the engine)". Automation cannot replace a real hidden tab in a real browser.
 
@@ -34,10 +34,34 @@ drag into the browser). In **desktop Chrome (current stable)**:
 
 | Browser (version) | Date | Hidden duration | Chime delay after the true end | Title already next phase | Notes |
 |---|---|---|---|---|---|
-| Chrome (fill in) | | | | | |
+| Chrome (version: fill in) | 2026-09-30 | 1 min | Audible: 1–2 s (several runs, by ear). Page-side: tone scheduled +37 ms after the deadline | Yes (title changed in the same ms) | See "Diagnostic" below |
+| Chrome (version: fill in) | 2026-09-30 | 30 min | pending | pending | |
 | Firefox | — | — | — | — | Out of scope, deferred to a later feature (`docs/roadmap.md` step 6) |
 
 If any delay is above 1 s or the chime is early, record it here and raise it before `ship`.
+
+## Diagnostic — 1 min run, real Chrome, tab hidden (2026-09-30)
+
+Timestamps logged in the page with `Date.now()` (a hook on `createOscillator`, a `MutationObserver` on
+`<title>`, and a capture-phase `click` listener; the click is +0 ms):
+
+| Event | Time after the Start click |
+|---|---|
+| click | +0 ms |
+| title `1 min · Focus` | +14 ms |
+| tone scheduled (3 notes, Focus-end) | +60037 ms |
+| title `Ready · 1 min · Short break` | +60038 ms |
+
+Reading: the wake-up worker brought the hidden page back 37 ms after the deadline (limit 1 s), the
+chime was scheduled in that same wake, and the title already showed the next phase. The 1–2 s heard
+is therefore added **after** the page plays the tone: audio output wake-up latency (output device,
+e.g. Bluetooth or a device that sleeps when idle) plus reaction time. Output device used: fill in.
+
+Open point for the owner: AC-06 says the chime "plays within 1 second". The app meets that at the
+point it hands the tone to the browser; audible latency of the output device is outside the app.
+Decide before `ship` whether to (a) keep the wording and note the device caveat, (b) reword AC-06 to
+"is played", or (c) add an audio keep-warm step. Re-run once on built-in speakers to confirm the device
+explanation.
 
 ## Review checklist (for `/sdd:review`)
 
