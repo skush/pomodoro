@@ -1,8 +1,8 @@
 # Manual timing check and review checklist — sensory-feedback (T13)
 
-**Status: PARTIAL — the manual runs in desktop Chrome and desktop Firefox are still to do.**
-`spec.md` §6 requires "e2e with the page hidden + manual stopwatch check in desktop Chrome and
-desktop Firefox (current stable)". Automation cannot replace a real hidden tab in a real browser.
+**Status: PARTIAL — the manual run in desktop Chrome is still to do. Firefox is out of scope (deferred to a later feature).**
+`spec.md` §6 requires "e2e with the page hidden + manual stopwatch check in desktop Chrome
+(current stable; Edge shares the engine)". Automation cannot replace a real hidden tab in a real browser.
 
 ## What was verified automatically (2026-09-30)
 
@@ -17,8 +17,7 @@ desktop Firefox (current stable)". Automation cannot replace a real hidden tab i
 ## To do by hand
 
 Build first (`npm run build`), then open the root `index.html` from `file://` (double-click or
-drag into the browser). For each of **desktop Chrome (current stable)** and **desktop Firefox
-(current stable)**:
+drag into the browser). In **desktop Chrome (current stable)**:
 
 1. Set the Focus duration to 1 minute and press Start (this also unlocks sound).
 2. Switch to another tab, and watch the clock. Note the wall-clock second at which the phase ends
@@ -27,13 +26,11 @@ drag into the browser). For each of **desktop Chrome (current stable)** and **de
 4. Note whether the tab strip title read "Ready · 5 min · Short break" by the time the chime played.
 5. Repeat once with a 30 min or longer hidden run (Focus 30) if practical (the spec says "including
    after ≥ 30 min hidden").
-6. Firefox only: also confirm the page loads from `file://` with no console error, i.e. the inline
-   Blob worker starts (the T1 spike could only be run on Chromium, see ADR-0001 "Spike result").
 
 | Browser (version) | Date | Hidden duration | Chime delay after the true end | Title already next phase | Notes |
 |---|---|---|---|---|---|
 | Chrome (fill in) | | | | | |
-| Firefox (fill in) | | | | | |
+| Firefox | — | — | — | — | Out of scope, deferred to a later feature (`docs/roadmap.md` step 6) |
 
 If any delay is above 1 s or the chime is early, record it here and raise it before `ship`.
 

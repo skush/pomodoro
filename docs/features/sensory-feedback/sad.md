@@ -50,10 +50,11 @@ guarantee as it is.
 
 - Decision override: the worker-unavailable fallback stays silent (§8 Error handling, ADR-0001) —
   rationale: the background timing promise (`spec.md` AC-06) is held for current stable desktop
-  Chrome and Firefox, where dedicated workers are available. That is confirmed by the `file://`
+  Chrome (and Edge, which shares the engine), where dedicated workers are available. That is confirmed by the `file://`
   spike and the manual stopwatch run (§11). A browser that blocks workers (enterprise policy, an
   extension) is outside that promise, and the chime still plays there, possibly late. A visible
   warning would be new UI the spec and `ux-flows.md` don't have. (Critic finding, 2026-09-30.)
+- Decision override (2026-09-30, owner): Firefox is excluded from the background timing promise and becomes a separate later feature (`docs/roadmap.md` step 6). The ≤ 1 s promise is verified on desktop Chrome, with Edge sharing the engine. In Firefox the chime still plays, and the ADR-0001 main-thread fallback applies if the worker cannot start.
 - Decision override: the feature stays size S despite four new files and two new snapshot fields —
   rationale: the files are splits inside the existing `src/logic/` and `src/ui/` modules, not new
   architectural modules. The snapshot fields are an internal read-only interface between two layers
@@ -76,8 +77,7 @@ guarantee as it is.
 - Browser APIs used, all without a permission prompt (`spec.md` AC-12): the Web Audio API for the
   tones, `document.title` for the Tab title mirror, inline SVG for the ring, the
   `prefers-reduced-motion` media query, and the Page Visibility API (already wired by core-timer).
-- Target browsers for the background timing promise: current stable desktop Chrome and desktop
-  Firefox (`spec.md` §3, AC-06). Phones and frozen tabs take the after-sleep path (AC-06b).
+- Target browsers for the background timing promise: current stable desktop Chrome (Edge shares the engine). Firefox is deferred to a later feature (`spec.md` §3, AC-06). Phones and frozen tabs take the after-sleep path (AC-06b).
 - Architecture convention: layered, `src/logic/` (pure, no DOM, no browser API) → `src/ui/` (DOM +
   browser APIs) → `src/main.js` (the one wiring point), unchanged (`CLAUDE.md`).
 
@@ -515,8 +515,7 @@ deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation
 ## 10. Quality requirements
 
 **QG-1. Background cue timeliness**
-- **When:** a phase reaches its Phase completion while running in a desktop Chrome or desktop
-  Firefox tab that is hidden, on an awake device, including after ≥ 30 min hidden. Also the visible
+- **When:** a phase reaches its Phase completion while running in a desktop Chrome tab that is hidden, on an awake device, including after ≥ 30 min hidden. Also the visible
   case.
 - **Then:** hidden tab: chime "≤ 1 s after the true Phase completion moment (the phase's start plus
   its length, by the clock — not when the page next redraws 0:00), never before it, including after
@@ -524,8 +523,7 @@ deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation
   Tab title: hidden, it "already shows the next phase waiting for Start when the Completion chime
   starts, and at most 60 s behind while running"; visible, it "shows the on-page countdown's whole
   minute (rounded up) within 1 s" (`spec.md` §6, verbatim).
-- **How verify:** "e2e with the page hidden + manual stopwatch check in desktop Chrome and desktop
-  Firefox (current stable)" for the hidden row, and e2e for the visible and title rows (`spec.md`
+- **How verify:** "e2e with the page hidden + manual stopwatch check in desktop Chrome (current stable)" for the hidden row, and e2e for the visible and title rows (`spec.md`
   §6). The engine-side "never before" is also a unit test: a wake-up before `deadlineAt` yields
   `justCompleted === null`. The fake page clock does not drive the worker (ADR-0001), so the hidden
   row's timing relies on the real-time e2e + the manual stopwatch run.
@@ -569,9 +567,9 @@ deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
 | `docs/architecture-map.md` is stale (`reflects_commit: 9c8717e`, which predates all three shipped features) | Medium | This SAD read `HEAD` directly (§3). Run `/sdd:survey` to refresh the map before the next feature | Tech Lead |
-| A Blob-URL worker may fail to start when `index.html` is opened from `file://`, or the zero-network e2e check may count the `blob:` URL | Medium | A spike as the first `tasks` item, in desktop Chrome + Firefox. The ADR-0001 fallback (main-thread timer) keeps the chime working, late only in a long-hidden tab. The e2e check is adjusted only to exclude `blob:` URLs, which are not network requests | sergii.kushnir@gmail.com |
-| True hidden-tab timing can't be proven by the headless e2e: headless doesn't throttle like a real hidden tab, and the fake page clock doesn't drive the worker | Medium | Split verification: exactly-once and tone choice under the fake clock; a real-time hidden-page e2e; the manual stopwatch run in desktop Chrome + Firefox that `spec.md` §6 already requires, recorded at `review` | sergii.kushnir@gmail.com |
-| Browser throttling policy could change, for example if worker timers become throttled in hidden tabs | Low | The manual timing check above catches it. The spec already scopes the promise to current stable desktop Chrome/Firefox | Tech Lead |
+| A Blob-URL worker may fail to start when `index.html` is opened from `file://`, or the zero-network e2e check may count the `blob:` URL | Medium | A spike as the first `tasks` item, in desktop Chrome (Firefox is deferred to a later feature). The ADR-0001 fallback (main-thread timer) keeps the chime working, late only in a long-hidden tab. The e2e check is adjusted only to exclude `blob:` URLs, which are not network requests | sergii.kushnir@gmail.com |
+| True hidden-tab timing can't be proven by the headless e2e: headless doesn't throttle like a real hidden tab, and the fake page clock doesn't drive the worker | Medium | Split verification: exactly-once and tone choice under the fake clock; a real-time hidden-page e2e; the manual stopwatch run in desktop Chrome that `spec.md` §6 already requires, recorded at `review` | sergii.kushnir@gmail.com |
+| Browser throttling policy could change, for example if worker timers become throttled in hidden tabs | Low | The manual timing check above catches it. The spec already scopes the promise to current stable desktop Chrome | Tech Lead |
 | `test/logic/timer-engine.test.js` pins the snapshot shape; ADR-0002 adds two fields | Low | Mechanical amendment in the same PR, tracked as a `tasks` item | Tech Lead |
 | The wake-up worker reopens core-timer ADR-0002. Its AC-03 source scan currently fails on any `postMessage(` / `onmessage` under `src/` | Medium | This is a deliberate amendment, not a mechanical edit (ADR-0001 "Amends core-timer ADR-0002", plus a pointer amendment in core-timer ADR-0002). The scan allows the page↔worker channel in `src/ui/wakeup.js` only and still forbids `window` `message`/`storage` listeners and `BroadcastChannel` everywhere. `review` checks that the worker handler calls only `onWake` | Tech Lead |
 | A second `getSnapshot()` caller in `src/ui/` would silently consume a completion, so no chime and no session credit | Medium | §8 "One-shot consumption" convention. The `review` checklist item is "render() is the only getSnapshot caller"; a source-scan unit test like `write-guard.test.js` is optional | Tech Lead |

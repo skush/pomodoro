@@ -1,6 +1,6 @@
 ---
 id: T13
-title: "Run the manual stopwatch check in desktop Chrome and Firefox and record the review checklist"
+title: "Run the manual stopwatch check in desktop Chrome and record the review checklist"
 layer: "docs"
 deps: ["T12"]
 blocks: []
@@ -14,7 +14,7 @@ status: "todo"
 
 <!-- Inline of upstream text is a snapshot taken at breakdown time; the source named in each signature always wins. Work from what is inlined. If a slice is insufficient, ambiguous, or contradicts the code in front of you, open the named file for the full text and follow that. Do not invent the missing part. -->
 
-# T13 — Run the manual stopwatch check in desktop Chrome and Firefox and record the review checklist
+# T13 — Run the manual stopwatch check in desktop Chrome and record the review checklist
 
 ## Place in the sequence
 
@@ -33,7 +33,7 @@ Confirms with a real stopwatch, on the two target browsers, that a hidden-tab ch
 
 ## Inlined context
 
-> | Chime timing, hidden tab, awake device | ≤ 1 s after the true Phase completion moment …, never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check in desktop Chrome and desktop Firefox (current stable) |
+> | Chime timing, hidden tab, awake device | ≤ 1 s after the true Phase completion moment …, never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check in desktop Chrome (current stable; Edge shares the engine) |
 >
 > — `spec.md §6, row «Chime timing, hidden tab», verbatim` · full text: [spec.md](../spec.md)
 
@@ -65,7 +65,7 @@ Internal — no API surface.
 
 ## Checklist
 
-- [ ] Open the built `index.html` from `file://` in desktop Chrome and Firefox, run a short Focus with the tab hidden (repeat once with ≥ 30 min hidden if practical), record the delay between the true end and the chime.
+- [ ] Open the built `index.html` from `file://` in desktop Chrome, run a short Focus with the tab hidden (repeat once with ≥ 30 min hidden if practical), record the delay between the true end and the chime.
 - [ ] Record results, browser versions and date in `_review/manual-timing-check.md`.
 - [ ] List the review checklist items: `render()` is the only `getSnapshot()` caller; the worker handler calls only `onWake`; the scan carve-out is limited to `src/ui/wakeup.js`.
 

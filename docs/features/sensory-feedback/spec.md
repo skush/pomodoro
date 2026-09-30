@@ -24,6 +24,7 @@ Traceability:
 - Addresses `docs/idea-brief.md` §6's risk that background timing "must actually be verified, not assumed": §6 makes it a measured NFR.
 - Decision recorded against the research: comparable timers all offer a mute or sound toggle; this step deliberately ships without one (§3), with a revisit in §8.
 - Decision recorded against `docs/idea-brief.md` §1 ("a live countdown mirrored in the browser tab title"): at the owner's call, the tab title shows whole minutes (rounded up) rather than a second-by-second countdown — the on-page countdown keeps the seconds (AC-04).
+- Decision (2026-09-30, owner): Firefox is excluded from the background timing promise for now and becomes its own later feature (§3). AC-06 and the §6 hidden-tab row are verified on desktop Chrome, with Edge sharing the engine.
 - Decision override: critic finding that the §6 "Self-contained" row cites a manual check — rationale: an automated zero-network-requests e2e check already exists (`test-e2e/durations.e2e.js:226`), so "extends the existing self-contained-load check" is accurate.
 
 ## 2. Goals
@@ -38,7 +39,8 @@ Traceability:
 - **System or push notifications** — the tab-title mirror plus the chime were judged sufficient, and a permission prompt is the distraction this app avoids (`docs/idea-brief.md` §5).
 - **Surviving a reload, or the browser discarding the tab, mid-phase** — the running phase lives only in memory by core-timer's design (core-timer AC-08); if the browser throws the tab away, the phase is lost and no chime fires. Persisting a running phase would be a separate feature.
 - **Chime timing while the device sleeps or the screen is locked** — the ~1 s promise covers an awake device with the tab in the background; after a sleep, the chime plays once when the page runs again (AC-06b), never on time.
-- **The ≤ 1 s background chime on phones or in frozen tabs** — the background timing promise (AC-06) is held for desktop Chrome and desktop Firefox. On a phone with the browser in the background, or when the browser freezes the tab to save power or memory, the phase behaves as after a sleep (AC-06b): the chime plays exactly once when the page runs again, and the next phase waits for Start. Phone widths stay in scope for layout (AC-13).
+- **The ≤ 1 s background chime on phones or in frozen tabs** — the background timing promise (AC-06) is held for desktop Chrome (and Edge, which shares its engine). Firefox is a separate, later feature (see the Firefox non-goal below). On a phone with the browser in the background, or when the browser freezes the tab to save power or memory, the phase behaves as after a sleep (AC-06b): the chime plays exactly once when the page runs again, and the next phase waits for Start. Phone widths stay in scope for layout (AC-13).
+- **Firefox support for the background timing promise** — deferred to a separate, later feature (`docs/roadmap.md` step 6). It needs its own hidden-tab timing run and a `file://` check of the inline wake-up worker, and no Firefox was available to verify against. Until then the chime still plays in Firefox, and if the wake-up worker cannot start the page falls back to a main-thread timer, so a chime in a long-hidden Firefox tab may be late. Nothing else in this spec is Firefox-specific.
 - **Coordinating two open tabs of the app** — each tab chimes and titles independently, the same accepted edge case adjustable-durations §6.1 already accepts.
 
 ## 4. User stories
@@ -149,7 +151,7 @@ Traceability:
 
 | Aspect | Target | Measurement |
 |---|---|---|
-| Chime timing, hidden tab, awake device | ≤ 1 s after the true Phase completion moment (the phase's start plus its length, by the clock — not when the page next redraws 0:00), never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check in desktop Chrome and desktop Firefox (current stable) |
+| Chime timing, hidden tab, awake device | ≤ 1 s after the true Phase completion moment (the phase's start plus its length, by the clock — not when the page next redraws 0:00), never before it, including after ≥ 30 min hidden | e2e with the page hidden + manual stopwatch check in desktop Chrome (current stable; Edge shares the engine) |
 | Chime timing, visible tab | ≤ 250 ms after the true Phase completion moment, never before it | e2e |
 | Ring vs countdown agreement | ring's remaining fraction within 1 s-equivalent of the countdown at every visible update | unit + e2e sample |
 | Tab title freshness | visible tab: shows the on-page countdown's whole minute (rounded up) within 1 s; hidden tab: already shows the next phase waiting for Start when the Completion chime starts, and at most 60 s behind while running | e2e |

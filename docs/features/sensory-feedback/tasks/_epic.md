@@ -55,7 +55,7 @@ See [tracker.md](./tracker.md) for status. Machine contract: [tasks.json](../tas
 
 | # | Task | Layer | Blocked by | DoD (short) |
 |---|---|---|---|---|
-| T1 | Spike: confirm an inline Blob worker starts from file:// in Chrome and Firefox, and that the zero-network check ignores blob: URLs | tests | — | Spike result for Chrome and Firefox is written next to ADR-0001. |
+| T1 | Spike: confirm an inline Blob worker starts from file:// in Chrome, and that the zero-network check ignores blob: URLs | tests | — | Spike result for Chrome is written next to ADR-0001. |
 | T2 | Extend the engine snapshot with phaseFullMs and a one-shot justCompleted for every phase type | domain | — | Unit tests over `settle()`/`getSnapshot()` pass for every case in the table above. |
 | T3 | Add the pure cue rules: tone data, ringFraction and tabTitle | domain | T2 | `test/logic/feedback.test.js` passes for tones, ring fraction and title. |
 | T4 | Add the ring, notice and focus palette tokens, reduced-motion and 320px layout rules, and a contrast unit test | ui | — | `test/logic/contrast.test.js` passes for all declared pairs. |
@@ -67,7 +67,7 @@ See [tracker.md](./tracker.md) for status. Machine contract: [tasks.json](../tas
 | T10 | Arm the wake-up on Start/Resume and after an early wake; cancel on Pause/Reset; build | wiring | T7, T9 | `npm run build` succeeds and the committed `index.html` matches `src/`. |
 | T11 | e2e: ring vs countdown, tab title states, 320px layout and reduced motion | tests | T8 | `npm run test:e2e` passes with the new file. |
 | T12 | e2e: exactly-once chime, no chime on controls, hidden-tab timing, sound-unavailable notice, no permission or network | tests | T10, T11 | `npm run test:e2e` passes. |
-| T13 | Run the manual stopwatch check in desktop Chrome and Firefox and record the review checklist | docs | T12 | `_review/manual-timing-check.md` exists with both browsers' results. |
+| T13 | Run the manual stopwatch check in desktop Chrome and record the review checklist | docs | T12 | `_review/manual-timing-check.md` exists with both browsers' results. |
 
 ## Risks / Hard rules
 

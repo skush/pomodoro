@@ -3,14 +3,14 @@
   "tasks": [
     {
       "id": "T1",
-      "title": "Spike: confirm an inline Blob worker starts from file:// in Chrome and Firefox, and that the zero-network check ignores blob: URLs",
+      "title": "Spike: confirm an inline Blob worker starts from file:// in Chrome, and that the zero-network check ignores blob: URLs",
       "layer": "tests",
       "deps": [],
       "acs": [
         "AC-06",
         "AC-12"
       ],
-      "dod": "Spike result for Chrome and Firefox is written next to ADR-0001.",
+      "dod": "Spike result for Chrome is written next to ADR-0001.",
       "files_hint": [
         "test-e2e/durations.e2e.js",
         "test-e2e/helpers.js",
@@ -240,7 +240,7 @@
     },
     {
       "id": "T13",
-      "title": "Run the manual stopwatch check in desktop Chrome and Firefox and record the review checklist",
+      "title": "Run the manual stopwatch check in desktop Chrome and record the review checklist",
       "layer": "docs",
       "deps": [
         "T12"

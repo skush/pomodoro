@@ -30,7 +30,7 @@ still come from the existing render path.
 ## Decision drivers
 
 - `spec.md` §6: chime ≤ 1 s after the true Phase completion moment, never before it, in a hidden
-  desktop Chrome/Firefox tab, including after ≥ 30 min hidden.
+  desktop Chrome tab (Firefox deferred to a later feature), including after ≥ 30 min hidden.
 - `spec.md` AC-06: the tab title already shows the next phase waiting for Start when the chime starts.
 - `spec.md` AC-07 / AC-06b: exactly one chime per completion. No chime after a Pause or Reset
   pressed before zero, and none held back after sleep.
@@ -126,7 +126,8 @@ narrow carve-out:
 - Playwright's fake page clock (used by `test-e2e/`) does not drive a worker's timers. The e2e
   suite verifies completion, chime selection and exactly-once through the normal render loop under
   the fake clock. True hidden-tab timing is verified by a real-time check plus the manual stopwatch
-  run in desktop Chrome and Firefox that `spec.md` §6 already names.
+  run in desktop Chrome that
+  `spec.md` §6 already names.
 - Needs a spike: a Blob-URL worker must be confirmed to start when `index.html` is opened from
   `file://` in both target browsers, and the existing zero-network-requests e2e check
   (`test-e2e/durations.e2e.js:226`) must not count the `blob:` URL as a request (`sad.md` §11).
@@ -157,7 +158,7 @@ narrow carve-out:
   `test-e2e/durations.e2e.js`.
 - **The zero-network check** now ignores `blob:` URLs only. A positive control (a real `http:`
   request from the page) is still counted.
-- **Firefox (current stable): not run.** No Firefox is available in the automation environment. It
-  is still open and is checked by hand in T13 together with the manual stopwatch run. If Firefox
-  refuses the Blob worker from `file://`, that becomes an amendment here, and the main-thread
-  fallback applies there.
+- **Firefox: out of scope for now.** Firefox support for the background timing promise is a separate,
+  later feature (`docs/roadmap.md` step 6). It has not been tested: no Firefox was available. If the
+  worker cannot start there, the main-thread fallback applies and a chime in a long-hidden tab may be
+  late. The follow-up feature must run the `file://` Blob-worker check and the hidden-tab timing run.

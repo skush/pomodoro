@@ -18,7 +18,7 @@ status: "todo"
 
 ## Place in the sequence
 
-- **Blocked by:** T10 — Arm the wake-up on Start/Resume and after an early wake; cancel on Pause/Reset; build; T11 — e2e: ring vs countdown, tab title states, 320px layout and reduced motion · **Blocks:** T13 — Run the manual stopwatch check in desktop Chrome and Firefox and record the review checklist · **Wave:** 7, after its dependencies.
+- **Blocked by:** T10 — Arm the wake-up on Start/Resume and after an early wake; cancel on Pause/Reset; build; T11 — e2e: ring vs countdown, tab title states, 320px layout and reduced motion · **Blocks:** T13 — Run the manual stopwatch check in desktop Chrome and record the review checklist · **Wave:** 7, after its dependencies.
 - **Lane:** shares files with T1 via `test-e2e/helpers.js`, T11 via `test-e2e/sensory-feedback.e2e.js` — serialized by `files_hint` overlap (already ordered by `deps` where needed).
 
 ## Why (user story)
@@ -33,7 +33,7 @@ Proves the background promise as far as automation can: one on-time chime, never
 
 ## Inlined context
 
-> Split verification: exactly-once and tone choice under the fake clock; a real-time hidden-page e2e; the manual stopwatch run in desktop Chrome + Firefox that `spec.md` §6 already requires, recorded at `review`. … The fake page clock does not drive the worker (ADR-0001), so the hidden row's timing relies on the real-time e2e + the manual stopwatch run.
+> Split verification: exactly-once and tone choice under the fake clock; a real-time hidden-page e2e; the manual stopwatch run in desktop Chrome that `spec.md` §6 already requires, recorded at `review`. … The fake page clock does not drive the worker (ADR-0001), so the hidden row's timing relies on the real-time e2e + the manual stopwatch run.
 >
 > — `sad.md §11 row 3 and §10 QG-1, abridged` · full text: [sad.md](../sad.md)
 

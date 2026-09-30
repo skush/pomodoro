@@ -163,7 +163,7 @@ never changes the counter. The notice stays until a later Start or Resume finds 
 flowchart TD
     A["SCR-01 User presses Start: this press enables sound, no permission prompt appears"] --> B["SCR-01 phase running"]
     B -->|"User switches to another tab"| C["SCR-03 any other browser tab, timer tab in the background"]
-    C --> D{"Awake device, desktop Chrome or Firefox, tab still running?"}
+    C --> D{"Awake device, desktop Chrome or Edge, tab still running?"}
     D -->|"yes"| E["Phase completes, chime plays within 1 s and never early"]
     E --> F["SCR-02 already shows the next phase marked ready"]
     F -->|"User returns to the timer tab"| K["SCR-01 next phase waiting for Start, no second chime"]
@@ -177,7 +177,7 @@ flowchart TD
 
 The User presses Start — that press is what enables sound, and no permission prompt of any kind ever
 appears — and then switches to another tab to work. Main branch, for an awake device in desktop Chrome
-or Firefox with the tab running in the background: however long the User is away, when the phase
+or Edge with the tab running in the background: however long the User is away, when the phase
 completes the chime plays within one second of that moment and never before it, and by the time it
 starts the tab title already shows the next phase marked ready. Back on the timer tab, the next phase
 is waiting for Start and no second chime plays on return. Alt branch, for a device that slept or

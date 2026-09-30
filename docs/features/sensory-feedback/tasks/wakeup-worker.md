@@ -18,7 +18,7 @@ status: "todo"
 
 ## Place in the sequence
 
-- **Blocked by:** T1 — Spike: confirm an inline Blob worker starts from file:// in Chrome and Firefox, and that the zero-network check ignores blob: URLs; T2 — Extend the engine snapshot with phaseFullMs and a one-shot justCompleted for every phase type · **Blocks:** T10 — Arm the wake-up on Start/Resume and after an early wake; cancel on Pause/Reset; build · **Wave:** 2, after its dependencies.
+- **Blocked by:** T1 — Spike: confirm an inline Blob worker starts from file:// in Chrome, and that the zero-network check ignores blob: URLs; T2 — Extend the engine snapshot with phaseFullMs and a one-shot justCompleted for every phase type · **Blocks:** T10 — Arm the wake-up on Start/Resume and after an early wake; cancel on Pause/Reset; build · **Wave:** 2, after its dependencies.
 - **Lane:** shares files with T2 via `test/logic/timer-engine.test.js` — serialized by `files_hint` overlap (already ordered by `deps` where needed).
 
 ## Why (user story)

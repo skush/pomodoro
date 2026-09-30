@@ -1,6 +1,6 @@
 ---
 id: T1
-title: "Spike: confirm an inline Blob worker starts from file:// in Chrome and Firefox, and that the zero-network check ignores blob: URLs"
+title: "Spike: confirm an inline Blob worker starts from file:// in Chrome, and that the zero-network check ignores blob: URLs"
 layer: "tests"
 deps: []
 blocks: ["T7"]
@@ -14,7 +14,7 @@ status: "todo"
 
 <!-- Inline of upstream text is a snapshot taken at breakdown time; the source named in each signature always wins. Work from what is inlined. If a slice is insufficient, ambiguous, or contradicts the code in front of you, open the named file for the full text and follow that. Do not invent the missing part. -->
 
-# T1 — Spike: confirm an inline Blob worker starts from file:// in Chrome and Firefox, and that the zero-network check ignores blob: URLs
+# T1 — Spike: confirm an inline Blob worker starts from file:// in Chrome, and that the zero-network check ignores blob: URLs
 
 ## Place in the sequence
 
@@ -77,7 +77,7 @@ Internal — no API surface.
 
 ## Checklist
 
-- [ ] Write a throwaway page that builds a worker from a Blob URL and posts one message back after 50 ms; open it from `file://` in desktop Chrome and desktop Firefox (current stable) and record start / no-start next to ADR-0001 (Consequences).
+- [ ] Write a throwaway page that builds a worker from a Blob URL and posts one message back after 50 ms; open it from `file://` in desktop Chrome (current stable) and record start / no-start next to ADR-0001 (Consequences).
 - [ ] In the existing zero-network check (`test-e2e/durations.e2e.js:226`), exclude `blob:` URLs from the counted requests; keep every other URL counted. Add a positive control (a real `http:` request is still counted).
 - [ ] If either browser refuses the Blob worker from `file://`, stop and record it as an ADR-0001 amendment before T7 starts.
 
@@ -90,5 +90,5 @@ Internal — no API surface.
 
 ## Definition of Done
 
-- [ ] Spike result for Chrome and Firefox is written next to ADR-0001.
+- [ ] Spike result for Chrome is written next to ADR-0001.
 - [ ] Zero-network e2e check passes with a Blob worker present and still fails on a real network request (positive control).
