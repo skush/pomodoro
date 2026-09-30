@@ -19,7 +19,10 @@ import {
   validateStoredCycleLength,
   validateDurationInput,
   validateCycleLengthInput,
+  ringFraction,
+  tabTitle,
 } from '../logic/index.js';
+import { createRing } from './ring.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
 const LABEL_LIMIT_MESSAGE = 'Task label is limited to 100 characters.';
@@ -239,6 +242,27 @@ const PHASE_LABELS = {
 
 const RENDER_INTERVAL_MS = 250;
 
+// sensory-feedback: shown when the page finds it cannot play the completion sound
+// (spec.md AC-11). Plain language; it points the User at the cues that still work.
+const SOUND_NOTICE_TEXT =
+  'The completion sound is unavailable in this browser. Follow the timer by the ring and the tab title instead.';
+
+// sensory-feedback T8 (sad.md §6 Flow 4): the visual cues for one snapshot — the Tab
+// title mirror, then the Progress ring. Both are pure functions of the snapshot
+// (src/logic/feedback.js). Fail-soft: a cue that cannot be drawn never stops the timer.
+export function applyVisualCues(snapshot, { ring, setTitle }) {
+  try {
+    setTitle(tabTitle(snapshot));
+  } catch {
+    // ignore: the countdown on the page still shows the time
+  }
+  try {
+    ring.update(ringFraction(snapshot), snapshot.phase);
+  } catch {
+    // ignore
+  }
+}
+
 export function mount(root, engine) {
   root.innerHTML = '';
   const card = document.createElement('div');
@@ -251,6 +275,14 @@ export function mount(root, engine) {
   const countdown = document.createElement('p');
   countdown.className = 'timer-countdown';
   countdown.setAttribute('role', 'timer');
+
+  // sensory-feedback: the Progress ring sits above the phase name and the countdown.
+  const ring = createRing();
+
+  const soundNotice = document.createElement('p');
+  soundNotice.className = 'sound-notice';
+  soundNotice.textContent = SOUND_NOTICE_TEXT;
+  soundNotice.hidden = true;
 
   const controls = document.createElement('div');
   controls.className = 'timer-controls';
@@ -293,7 +325,7 @@ export function mount(root, engine) {
   sessionCount.className = 'session-count';
 
   controls.append(startBtn, pauseBtn, resetBtn);
-  card.append(label, countdown, controls, labelFieldLabel, labelField, labelLimitMessage, sessionCount);
+  card.append(ring.element, label, countdown, controls, soundNotice, labelFieldLabel, labelField, labelLimitMessage, sessionCount);
   root.append(card);
 
   const storage = acquireStorage();
@@ -435,6 +467,14 @@ export function mount(root, engine) {
     const { startDisabled, pauseDisabled } = controlStates(snapshot);
     startBtn.disabled = startDisabled;
     pauseBtn.disabled = pauseDisabled;
+    // sad.md §8 One-shot consumption: fixed order title -> ring -> chime/notice -> Session
+    // counter. (The chime/notice step is added by the completion-cue task.)
+    applyVisualCues(snapshot, {
+      ring,
+      setTitle: (text) => {
+        if (document.title !== text) document.title = text;
+      },
+    });
     updateSessionCount(now, snapshot.justCompletedFocusAt);
   }
 
