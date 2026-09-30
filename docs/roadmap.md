@@ -81,4 +81,4 @@ flowchart LR
 | Core timer engine + controls | 2026-09-27 | [changelog](features/core-timer/CHANGELOG.md) · [review](features/core-timer/_review/review-2026-09-27.md) · `7060adb` |
 | Session tracking (task label + daily counter) | 2026-09-29 | [changelog](features/session-tracking/CHANGELOG.md) · [review](features/session-tracking/_review/review-2026-09-29.md) · `58fdc5b` |
 | Adjustable durations + cycle length | 2026-09-29 | [changelog](features/adjustable-durations/CHANGELOG.md) · [review](features/adjustable-durations/_review/review-2026-09-29.md) · `e7c77dd` |
-| Sensory feedback (ring, tab title, chime) | 2026-09-30 | [changelog](features/sensory-feedback/CHANGELOG.md) · [review](features/sensory-feedback/_review/review-2026-09-30.md) · [PR #1](https://github.com/skush/pomodoro/pull/1) |
+| Sensory feedback (ring, tab title, chime) | 2026-09-30 | [changelog](features/sensory-feedback/CHANGELOG.md) · [review](features/sensory-feedback/_review/review-2026-09-30.md) · [PR #1](https://github.com/skush/pomodoro/pull/1) · `61326ff` |
