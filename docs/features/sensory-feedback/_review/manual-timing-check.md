@@ -7,10 +7,15 @@
 ## What was verified automatically (2026-09-30)
 
 - **Microsoft Edge (Chromium, headless, Playwright), real time, `file://`:** the e2e test
-  "AC-06: hidden tab, real time" in `test-e2e/sensory-feedback-chime.e2e.js` disables the page's own
-  250 ms render loop and reports the page as hidden, so only the wake-up worker can bring the page
-  back. The chime started ≥ the phase start plus 60 s (never early) and ≤ 1 s after the deadline, and
-  the tab title already showed the next phase waiting for Start. Passed.
+  "AC-06: hidden tab, real time" in `test-e2e/sensory-feedback-chime.e2e.js` starts the page with
+  `setInterval` already a no-op (`noRenderLoop`, an init script that runs before the app), so the
+  page's own 250 ms render loop never starts, and reports the page as hidden. Only the wake-up worker
+  can bring the page back. The chime started ≥ the phase start plus 60 s (never early) and ≤ 1 s after
+  the deadline, and the tab title already showed the next phase waiting for Start. Passed (chime at
+  about 60.3 s).
+- **Negative control** (review F1): "AC-06 control" runs the same setup with a `Worker` that accepts
+  messages and never answers (`deadWorker`). The phase does not complete and no chime plays 2 s past
+  the deadline. So the test above passes because of the worker, not because of the render loop.
 - Headless Edge does not throttle like a real hidden tab, so this proves the wake-up path works, not
   the browsers' throttling behaviour.
 

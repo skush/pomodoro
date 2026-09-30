@@ -36,15 +36,32 @@ export async function launchBrowser() {
 // sensory-feedback: `viewport` and `reducedMotion` shape the context; `noAudio` removes the
 // Web Audio API before the page runs (sound unavailable); `audioSpy` replaces AudioContext
 // with a recording fake (see installAudioSpy) so a test can observe tones without hearing them.
+// `noRenderLoop` turns setInterval into a no-op BEFORE the app runs, so the page's own 250 ms
+// render loop never starts; `deadWorker` replaces Worker with one that accepts messages and never
+// answers (deleting it would let the main-thread fallback rescue the phase). Together they leave
+// the wake-up worker as the only thing that can bring a hidden page back at the deadline.
 export async function openApp(
   browser,
-  { storage = {}, blockDurationWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null, realClock = false } = {},
+  { storage = {}, blockDurationWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null, realClock = false, noRenderLoop = false, deadWorker = false } = {},
 ) {
   const context = await browser.newContext({ viewport, reducedMotion });
   if (noAudio) {
     await context.addInitScript(() => {
       delete window.AudioContext;
       delete window.webkitAudioContext;
+    });
+  }
+  if (noRenderLoop) {
+    await context.addInitScript(() => {
+      window.setInterval = () => 0;
+    });
+  }
+  if (deadWorker) {
+    await context.addInitScript(() => {
+      window.Worker = class DeadWorker {
+        postMessage() {}
+        terminate() {}
+      };
     });
   }
   if (audioSpy) await context.addInitScript(installAudioSpy, audioSpy);

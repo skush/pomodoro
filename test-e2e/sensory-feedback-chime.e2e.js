@@ -154,27 +154,33 @@ test('AC-12: a full run raises no permission prompt or dialog and makes no reque
   });
 });
 
-// Real time, no fake clock: the page's own 250 ms render loop is disabled, so ONLY the
-// wake-up worker can bring the page back at the deadline (ADR-0001). The page reports hidden.
-test('AC-06: hidden tab, real time — the wake-up alone completes the phase and the chime plays within 1 s, never before', async () => {
-  const app = await openApp(browser, { realClock: true, audioSpy: {}, storage: { 'adjustable-durations:focus-duration': '1' } });
-  try {
-    await app.page.evaluate(() => {
-      window.setInterval = () => 0; // no render loop from here on
-      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
-      window.addEventListener('click', () => {
-        window.__t1 = Date.now(); // bubbles after the app's own handler
-      });
-      document.addEventListener(
-        'click',
-        () => {
-          window.__t0 = Date.now(); // capture: before the app's own handler
-        },
-        true,
-      );
+// Real time, no fake clock. The page's own 250 ms render loop never starts (noRenderLoop, applied
+// before the app runs), so ONLY the wake-up worker can bring the page back at the deadline
+// (ADR-0001). The page reports hidden.
+const HIDDEN_ONE_MINUTE = { realClock: true, audioSpy: {}, noRenderLoop: true, storage: { 'adjustable-durations:focus-duration': '1' } };
+
+async function startHiddenWithClickTimes(app) {
+  await app.page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    window.addEventListener('click', () => {
+      window.__t1 = Date.now(); // bubbles after the app's own handler
     });
-    await app.start().click();
-    const { t0, t1 } = await app.page.evaluate(() => ({ t0: window.__t0, t1: window.__t1 }));
+    document.addEventListener(
+      'click',
+      () => {
+        window.__t0 = Date.now(); // capture: before the app's own handler
+      },
+      true,
+    );
+  });
+  await app.start().click();
+  return app.page.evaluate(() => ({ t0: window.__t0, t1: window.__t1 }));
+}
+
+test('AC-06: hidden tab, real time — the wake-up alone completes the phase and the chime plays within 1 s, never before', async () => {
+  const app = await openApp(browser, HIDDEN_ONE_MINUTE);
+  try {
+    const { t0, t1 } = await startHiddenWithClickTimes(app);
     // The deadline is one minute after Start — poll for the chime rather than sleeping blindly.
     await app.page.waitForFunction(() => window.__tones.length > 0, null, { timeout: 75_000, polling: 100 });
     const tones = await app.tones();
@@ -183,6 +189,21 @@ test('AC-06: hidden tab, real time — the wake-up alone completes the phase and
     assert.ok(at >= t0 + 60_000, `chime ${t0 + 60_000 - at} ms too early`);
     assert.ok(at <= t1 + 60_000 + 1000, `chime ${at - (t1 + 60_000)} ms after the deadline (limit 1000)`);
     assert.equal(await app.title(), 'Ready · 5 min · Short break'); // title already shows the next phase
+  } finally {
+    await app.context.close();
+  }
+});
+
+// Negative control (review F1): the same setup with a worker that never answers. Nothing else
+// can complete the phase, so it must still be running well after the deadline — proving the
+// test above passes because of the worker, not the render loop.
+test('AC-06 control: without a working wake-up worker the hidden page does not complete the phase', async () => {
+  const app = await openApp(browser, { ...HIDDEN_ONE_MINUTE, deadWorker: true });
+  try {
+    const { t1 } = await startHiddenWithClickTimes(app);
+    await app.page.waitForTimeout(Math.max(0, t1 + 60_000 + 2000 - Date.now()));
+    assert.deepEqual(await app.tones(), []);
+    assert.match(await app.title(), /Focus/); // still counting: nothing woke the page
   } finally {
     await app.context.close();
   }
