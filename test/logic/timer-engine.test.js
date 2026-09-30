@@ -712,3 +712,115 @@ describe('engine setter bounds (adjustable-durations review fix)', () => {
     assert.equal(phaseAfterFocusSessions(eightB, 8), PHASES.LONG_BREAK);
   });
 });
+
+// sensory-feedback T2 (ADR-0002): getSnapshot() carries the phase's pinned full length
+// (`phaseFullMs`) and a one-shot `justCompleted {phase, at}` for EVERY phase type.
+describe('phaseFullMs and justCompleted (sensory-feedback ADR-0002)', () => {
+  test('a fresh snapshot carries phaseFullMs and a null justCompleted', () => {
+    const engine = createTimerEngine();
+    const snap = engine.getSnapshot(0);
+    assert.equal(snap.phaseFullMs, FOCUS);
+    assert.equal(snap.justCompleted, null);
+  });
+
+  test('AC-05/AC-10: a Focus completion latches {focus, true deadline}, once', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    const snap = engine.getSnapshot(FOCUS + 3000); // read 3 s late
+    assert.deepEqual(snap.justCompleted, { phase: PHASES.FOCUS, at: FOCUS });
+    assert.equal(engine.getSnapshot(FOCUS + 4000).justCompleted, null);
+    assert.equal(snap.justCompletedFocusAt, FOCUS); // session-tracking's field is unchanged
+  });
+
+  test('AC-05: a break completion latches the break phase type and leaves justCompletedFocusAt unset', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(FOCUS); // Focus completes, Short break loads idle
+    engine.start(FOCUS + 1000);
+    const snap = engine.getSnapshot(FOCUS + 1000 + SHORT + 500);
+    assert.deepEqual(snap.justCompleted, { phase: PHASES.SHORT_BREAK, at: FOCUS + 1000 + SHORT });
+    assert.equal(snap.justCompletedFocusAt, null);
+    assert.equal(snap.phase, PHASES.FOCUS);
+  });
+
+  test('a Long break completion is latched with the long_break type', () => {
+    const engine = createTimerEngine();
+    let t = 0;
+    for (let i = 0; i < 4; i += 1) {
+      engine.start(t);
+      t += FOCUS;
+      engine.getSnapshot(t);
+      if (i < 3) {
+        engine.start(t);
+        t += SHORT;
+        engine.getSnapshot(t);
+      }
+    }
+    assert.equal(engine.getSnapshot(t).phase, PHASES.LONG_BREAK);
+    engine.start(t);
+    const snap = engine.getSnapshot(t + LONG);
+    assert.deepEqual(snap.justCompleted, { phase: PHASES.LONG_BREAK, at: t + LONG });
+  });
+
+  test('AC-06b: a completion detected inside a control call survives to the next getSnapshot', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.pause(FOCUS + 100); // settle() inside pause detects the completion
+    const snap = engine.getSnapshot(FOCUS + 200);
+    assert.deepEqual(snap.justCompleted, { phase: PHASES.FOCUS, at: FOCUS });
+    assert.equal(engine.getSnapshot(FOCUS + 300).justCompleted, null);
+  });
+
+  test('AC-06b: a late read after a long sleep still yields one completion at the true deadline', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    const snap = engine.getSnapshot(FOCUS + 3 * 60 * MIN);
+    assert.deepEqual(snap.justCompleted, { phase: PHASES.FOCUS, at: FOCUS });
+    assert.equal(snap.idle, true);
+    assert.equal(snap.running, false);
+  });
+
+  test('never before the deadline: an early read leaves justCompleted null and the phase running', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    const snap = engine.getSnapshot(FOCUS - 1);
+    assert.equal(snap.justCompleted, null);
+    assert.equal(snap.running, true);
+  });
+
+  test('AC-07: Pause or Reset just before zero means the phase never completes', () => {
+    const paused = createTimerEngine();
+    paused.start(0);
+    paused.pause(FOCUS - 1);
+    assert.equal(paused.getSnapshot(FOCUS + MIN).justCompleted, null);
+    const reset = createTimerEngine();
+    reset.start(0);
+    reset.reset(FOCUS - 1);
+    assert.equal(reset.getSnapshot(FOCUS + MIN).justCompleted, null);
+  });
+
+  test('AC-08: phaseFullMs stays pinned across a mid-phase commit and changes after Reset', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.setConfiguredDurations({ focus: 10, shortBreak: 5, longBreak: 15 });
+    assert.equal(engine.getSnapshot(1000).phaseFullMs, FOCUS);
+    engine.pause(2000);
+    assert.equal(engine.getSnapshot(3000).phaseFullMs, FOCUS);
+    engine.reset(4000);
+    assert.equal(engine.getSnapshot(5000).phaseFullMs, 10 * MIN);
+  });
+
+  test('AC-09: an idle phase follows a committed duration in phaseFullMs and remainingMs', () => {
+    const engine = createTimerEngine();
+    engine.setConfiguredDurations({ focus: 30, shortBreak: 5, longBreak: 15 });
+    const snap = engine.getSnapshot(0);
+    assert.equal(snap.phaseFullMs, 30 * MIN);
+    assert.equal(snap.remainingMs, 30 * MIN);
+  });
+
+  test('the engine surface is still the six control methods (no new control method)', () => {
+    assert.deepEqual(Object.keys(createTimerEngine()).sort(), [
+      'getSnapshot', 'pause', 'reset', 'setConfiguredDurations', 'setCycleLength', 'start',
+    ]);
+  });
+});
