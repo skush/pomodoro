@@ -89,8 +89,28 @@ Two clarifications surfaced by `review`, neither reversing the decision above:
   reach the engine through), verified statically instead of by simulating an event that would have
   had nothing to land on anyway.
 
+## Amendment (2026-09-30, sensory-feedback)
+
+The premise above ("no listener registered") is reopened, as this ADR's Neutral consequence
+requires, by [sensory-feedback ADR-0001](../../sensory-feedback/adr/0001-wake-the-page-at-the-deadline-from-an-inline-worker.md)
+("Amends core-timer ADR-0002"). A single private channel is allowed, between the page and a worker
+it creates itself, in `src/ui/wakeup.js` only. Its handler may only trigger a render (a read),
+never an engine control method. `window`/global `message` and `storage` listeners and
+`BroadcastChannel` remain forbidden everywhere. The AC-03 source scan in
+`test/logic/timer-engine.test.js` is reworked to allow exactly that file. The guarantee that no
+input channel reaches the engine's control methods is unchanged.
+
 ## Links
 
 - Spec: [[../spec.md]] §5 AC-03, §6.1
 - SAD: [[../sad.md]] §4, §8
 - Related ADR: [[0001-wall-clock-deadline-timing]]
+
+## Amendment (sensory-feedback, 2026-09-30)
+
+The "no input channel" scan in `test/logic/timer-engine.test.js` now permits `postMessage(` and
+`onmessage` in exactly one file, `src/ui/wakeup.js`: the private page-to-worker channel of the
+wake-up clock. Window/global `message` listeners, `storage` listeners and `BroadcastChannel` remain
+forbidden in every file. No engine control method is reachable from that channel. See
+[sensory-feedback ADR-0001](../../sensory-feedback/adr/0001-wake-the-page-at-the-deadline-from-an-inline-worker.md),
+"Amends core-timer ADR-0002".

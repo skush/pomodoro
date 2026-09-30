@@ -23,11 +23,12 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | 2 | [Core timer engine + controls](features/core-timer/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 3 | [Session tracking (task label + daily counter)](features/session-tracking/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 4 | [Adjustable durations + cycle length](features/adjustable-durations/spec.md) | `idea-brief.md` §7 Recommendation | S | shipped |
-| 5 | Sensory feedback (progress ring, tab-title mirror, chime, dark UI) — deferred, built last | `idea-brief.md` §1 Raw idea | S | idea |
+| 5 | [Sensory feedback (progress ring, tab-title mirror, chime, dark UI)](features/sensory-feedback/spec.md) | `idea-brief.md` §1 Raw idea | S | shipped |
+| 6 | Firefox support for the background chime (hidden-tab timing run, `file://` worker check) | [`sensory-feedback/spec.md`](features/sensory-feedback/spec.md) §3 | XS | fog |
 
 ## Not yet specified
 
-<!-- none — every step above is already precisely formulated -->
+- **Step 6, Firefox support for the background chime.** In scope but not formulated: it needs a Firefox to test on, a hidden-tab timing run, and a check that the inline wake-up worker starts from `file://`. Deferred from sensory-feedback at the owner's call (2026-09-30).
 
 ## Out of scope
 
@@ -58,6 +59,7 @@ flowchart LR
   s2 -->|extends the timer's duration config and cycle-length cadence| s4["4 · Adjustable durations"]
   s2 -->|needs the countdown/phase state to drive ring/title/chime| s5["5 · Sensory feedback"]
   s4 -->|ring/tab-title must read the adjustable duration, not a hardcoded one, to avoid rework| s5
+  s5 -->|the wake-up worker and chime must exist before they can be verified on Firefox| s6["6 · Firefox support"]
 ```
 
 ## Execution path
@@ -68,7 +70,8 @@ flowchart LR
 | 2 | 2 | `src/logic/`, `src/ui/` | 3, 4 |
 | 3 | 3 | `src/ui/` (shared — serialized, not parallel with 4) | — |
 | 4 | 4 | `src/ui/`, `src/logic/` (shared — serialized, not parallel with 3) | 5 |
-| 5 | 5 | `src/ui/`, `src/styles.css` (deferred — built last, after step 4 ships and is checked) | — |
+| 5 | 5 | `src/ui/`, `src/styles.css` (deferred — built last, after step 4 ships and is checked) | 6 |
+| 6 | 6 | verification only, plus a fallback fix if Firefox needs one (fog — not yet formulated) | — |
 
 ## Shipped
 
@@ -78,3 +81,4 @@ flowchart LR
 | Core timer engine + controls | 2026-09-27 | [changelog](features/core-timer/CHANGELOG.md) · [review](features/core-timer/_review/review-2026-09-27.md) · `7060adb` |
 | Session tracking (task label + daily counter) | 2026-09-29 | [changelog](features/session-tracking/CHANGELOG.md) · [review](features/session-tracking/_review/review-2026-09-29.md) · `58fdc5b` |
 | Adjustable durations + cycle length | 2026-09-29 | [changelog](features/adjustable-durations/CHANGELOG.md) · [review](features/adjustable-durations/_review/review-2026-09-29.md) · `e7c77dd` |
+| Sensory feedback (ring, tab title, chime) | 2026-09-30 | [changelog](features/sensory-feedback/CHANGELOG.md) · [review](features/sensory-feedback/_review/review-2026-09-30.md) · [PR #1](https://github.com/skush/pomodoro/pull/1) |

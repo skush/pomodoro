@@ -74,6 +74,10 @@ export function createTimerEngine() {
   // public method's settle() call detects the transition. getSnapshot() consumes
   // and clears it exactly once.
   let justCompletedFocusAt = null;
+  // sensory-feedback ADR-0002: the same one-shot latch for EVERY phase type — which
+  // phase completed and its true deadline — so the UI can pick the right tone exactly
+  // once. Latched in settle(), consumed by the getSnapshot() that returns it.
+  let justCompleted = null;
 
   // Advances at most one phase boundary if the running phase's deadline has
   // passed. Any further elapsed time beyond that single boundary is discarded
@@ -81,6 +85,7 @@ export function createTimerEngine() {
   function settle(now) {
     if (!running || now < deadlineAt) return;
 
+    justCompleted = { phase, at: deadlineAt };
     if (phase === PHASES.FOCUS) {
       focusCount += 1;
       justCompletedFocusAt = deadlineAt;
@@ -158,6 +163,8 @@ export function createTimerEngine() {
     const remaining = running ? clampRemaining(phaseFullMs, deadlineAt - now) : remainingMs;
     const consumedCompletion = justCompletedFocusAt;
     justCompletedFocusAt = null;
+    const consumedCompletionRecord = justCompleted;
+    justCompleted = null;
     return Object.freeze({
       phase,
       running,
@@ -167,6 +174,10 @@ export function createTimerEngine() {
       remainingMs: remaining,
       focusCount,
       justCompletedFocusAt: consumedCompletion,
+      // sensory-feedback ADR-0002: the phase's pinned full length (the Progress ring
+      // measures against it) and the one-shot completion record.
+      phaseFullMs,
+      justCompleted: consumedCompletionRecord,
     });
   }
 
@@ -319,3 +330,6 @@ export function formatDuration(ms) {
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
+
+// sensory-feedback: the pure cue rules (tone data, ring fraction, tab-title text).
+export { TONES, toneFor, ringFraction, tabTitle } from './feedback.js';
