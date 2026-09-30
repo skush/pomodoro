@@ -1,6 +1,6 @@
 ---
 status: living
-updated_at: "2026-09-29"
+updated_at: "2026-09-30"
 ---
 
 # Roadmap — pomodoro
@@ -24,11 +24,11 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | 3 | [Session tracking (task label + daily counter)](features/session-tracking/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 4 | [Adjustable durations + cycle length](features/adjustable-durations/spec.md) | `idea-brief.md` §7 Recommendation | S | shipped |
 | 5 | [Sensory feedback (progress ring, tab-title mirror, chime, dark UI)](features/sensory-feedback/spec.md) | `idea-brief.md` §1 Raw idea | S | shipped |
-| 6 | Firefox support for the background chime (hidden-tab timing run, `file://` worker check) | [`sensory-feedback/spec.md`](features/sensory-feedback/spec.md) §3 | XS | fog |
+| 6 | Firefox support for the background chime (hidden-tab timing run, `file://` worker check) | [`sensory-feedback/spec.md`](features/sensory-feedback/spec.md) §3 | XS | fog — nice-to-have, much later |
 
 ## Not yet specified
 
-- **Step 6, Firefox support for the background chime.** In scope but not formulated: it needs a Firefox to test on, a hidden-tab timing run, and a check that the inline wake-up worker starts from `file://`. Deferred from sensory-feedback at the owner's call (2026-09-30).
+- **Step 6, Firefox support for the background chime.** Nice-to-have, parked at the end of the roadmap by the owner (2026-09-30) — do not schedule it soon. In scope but not formulated: it needs a Firefox to test on, a hidden-tab timing run, and a check that the inline wake-up worker starts from `file://`. Deferred from sensory-feedback at the owner's call (2026-09-30).
 
 ## Out of scope
 
@@ -71,7 +71,7 @@ flowchart LR
 | 3 | 3 | `src/ui/` (shared — serialized, not parallel with 4) | — |
 | 4 | 4 | `src/ui/`, `src/logic/` (shared — serialized, not parallel with 3) | 5 |
 | 5 | 5 | `src/ui/`, `src/styles.css` (deferred — built last, after step 4 ships and is checked) | 6 |
-| 6 | 6 | verification only, plus a fallback fix if Firefox needs one (fog — not yet formulated) | — |
+| 6 | 6 | verification only, plus a fallback fix if Firefox needs one (fog — nice-to-have, much later; not yet formulated) | — |
 
 ## Shipped
 
