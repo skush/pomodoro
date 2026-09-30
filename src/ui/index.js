@@ -25,6 +25,7 @@ import {
 } from '../logic/index.js';
 import { createRing } from './ring.js';
 import { createChimePlayer } from './audio.js';
+import { createWakeup } from './wakeup.js';
 
 const LABEL_PLACEHOLDER = 'What are you focusing on?';
 const LABEL_LIMIT_MESSAGE = 'Task label is limited to 100 characters.';
@@ -280,6 +281,19 @@ export async function unlockSound(player, setNotice) {
   setNotice(!available);
 }
 
+// sensory-feedback T10 (ADR-0001, sad.md §6 Flows 1-3): keeps the wake-up clock in step
+// with the last rendered snapshot. A running phase arms it for the remaining time (this
+// is also the re-arm after an early wake-up); anything else cancels it. It only decides
+// when the page next looks at the clock — never whether a phase completed. Fail-soft.
+export function syncWakeup(snapshot, wakeup) {
+  try {
+    if (snapshot.running) wakeup.arm(snapshot.remainingMs);
+    else wakeup.cancel();
+  } catch {
+    // ignore: the render loop and visibilitychange still reconcile against the clock
+  }
+}
+
 // sensory-feedback T8 (sad.md §6 Flow 4): the visual cues for one snapshot — the Tab
 // title mirror, then the Progress ring. Both are pure functions of the snapshot
 // (src/logic/feedback.js). Fail-soft: a cue that cannot be drawn never stops the timer.
@@ -517,6 +531,13 @@ export function mount(root, engine) {
     updateSessionCount(now, snapshot.justCompletedFocusAt);
   }
 
+  // sensory-feedback T10: the wake-up only re-runs render() (a read) and re-arms from
+  // the snapshot it just showed — no second getSnapshot() caller, no control method.
+  const wakeup = createWakeup(() => {
+    render();
+    syncWakeup(lastSnapshot, wakeup);
+  });
+
   // Moves focus to the control that just became enabled when the one the
   // User's keyboard focus was on just got disabled, so Space/Enter activation
   // never strands focus on a now-inert button (US-02 keyboard activation).
@@ -544,16 +565,19 @@ export function mount(root, engine) {
     refreshConfigFromStorage();
     engine.start(Date.now());
     render();
+    syncWakeup(lastSnapshot, wakeup);
     refocusIfStranded(startBtn, pauseBtn);
   });
   pauseBtn.addEventListener('click', () => {
     engine.pause(Date.now());
     render();
+    syncWakeup(lastSnapshot, wakeup);
     refocusIfStranded(pauseBtn, startBtn);
   });
   resetBtn.addEventListener('click', () => {
     engine.reset(Date.now());
     render();
+    syncWakeup(lastSnapshot, wakeup);
   });
 
   // Reconcile against real elapsed time as soon as the tab becomes visible
