@@ -34,7 +34,7 @@ drag into the browser). In **desktop Chrome (current stable)**:
 
 | Browser (version) | Date | Hidden duration | Chime delay after the true end | Title already next phase | Notes |
 |---|---|---|---|---|---|
-| Chrome (version: fill in) | 2026-09-30 | 1 min | Audible: 1–2 s (several runs, by ear). Page-side: tone scheduled +37 ms after the deadline | Yes (title changed in the same ms) | See "Diagnostic" below |
+| Chrome (version: fill in) | 2026-09-30 | 1 min | Audible: about 1 s in the instrumented run (1–2 s in earlier runs), by ear. Page-side: tone scheduled +37 ms after the deadline | Yes (title changed in the same ms) | See "Diagnostic" below |
 | Chrome (version: fill in) | 2026-09-30 | 30 min | pending | pending | |
 | Firefox | — | — | — | — | Out of scope, deferred to a later feature (`docs/roadmap.md` step 6) |
 
@@ -54,7 +54,7 @@ Timestamps logged in the page with `Date.now()` (a hook on `createOscillator`, a
 
 Reading: the wake-up worker brought the hidden page back 37 ms after the deadline (limit 1 s), the
 chime was scheduled in that same wake, and the title already showed the next phase. The 1–2 s heard
-is therefore added **after** the page plays the tone: audio output wake-up latency (output device,
+is therefore added **after** the page plays the tone (heard about 1 s after the deadline in this same run): audio output wake-up latency (output device,
 e.g. Bluetooth or a device that sleeps when idle) plus reaction time. Output device used: fill in.
 
 Open point for the owner: AC-06 says the chime "plays within 1 second". The app meets that at the
