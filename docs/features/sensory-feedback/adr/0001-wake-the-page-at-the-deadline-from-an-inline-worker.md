@@ -81,6 +81,19 @@ Shape (for `tasks`; `src/ui/wakeup.js`):
   falls back to a main-thread `setTimeout`. This is fail-soft per `CLAUDE.md`. The chime still
   plays, possibly late in a hidden tab, and the case is listed in `sad.md` §11.
 
+### Amendments (2026-09-30, after review)
+
+- **Fallback on a late worker error.** Besides the constructor throwing, `createWakeup` also falls
+  back when the worker reports an `error` after construction (a policy block, or the blob URL revoked
+  before the script loaded). The handler detaches the dead worker (`onmessage = null`, `terminate()`),
+  marks it failed, and re-arms any pending deadline on the main-thread `setTimeout` for the remaining
+  time. It still only ever calls `onWake`, so the carve-out below is unchanged
+  (`src/ui/wakeup.js`, review finding F5, task T15).
+- **"Started", not "audible".** The owner reworded AC-06 and the `spec.md` §6 row: the promise is that
+  the chime is *started* (handed to the browser's audio output) within 1 s. Audible latency of the
+  output device is recorded, not graded (`_review/manual-timing-check.md`). Read the "≤ 1 s" in the
+  context and drivers above in that sense.
+
 ### Amends core-timer ADR-0002
 
 [core-timer ADR-0002](../../core-timer/adr/0002-structural-encapsulation-control-guard.md) guarantees

@@ -105,8 +105,9 @@ export async function launchPersistent(userDataDir) {
 }
 
 // Runs in the page before the app: replaces AudioContext with a fake that records every
-// oscillator it is asked to start, on `window.__tones` as {frequency, at} where `at` is the
-// page's Date.now() when the oscillator was scheduled. `state` is what resume() leaves the
+// oscillator it is asked to start, on `window.__tones` as {frequency, at, title} where `at` is the
+// page's Date.now() when the oscillator was scheduled and `title` is document.title at that
+// moment (so a test can check the title changed first). `state` is what resume() leaves the
 // context in ('running' or 'suspended').
 export function installAudioSpy({ state = 'running' } = {}) {
   window.__tones = [];
@@ -124,7 +125,7 @@ export function installAudioSpy({ state = 'running' } = {}) {
       return { connect() {}, gain: { setValueAtTime() {}, linearRampToValueAtTime() {} } };
     }
     createOscillator() {
-      const osc = { type: '', frequency: { value: 0 }, connect() {}, stop() {}, start() { window.__tones.push({ frequency: osc.frequency.value, at: Date.now() }); } };
+      const osc = { type: '', frequency: { value: 0 }, connect() {}, stop() {}, start() { window.__tones.push({ frequency: osc.frequency.value, at: Date.now(), title: document.title }); } };
       return osc;
     }
   };

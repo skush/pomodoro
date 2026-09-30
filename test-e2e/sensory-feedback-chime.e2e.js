@@ -50,6 +50,7 @@ test('AC-05/AC-07: exactly one Focus-end chime (rising) per Focus completion, no
     const tones = await app.tones();
     assert.equal(tones.length, FOCUS_NOTES);
     assert.ok(rising(tones));
+    assert.equal(tones[0].title, 'Ready · 5 min · Short break'); // title first, then chime (review R2)
     await app.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); // back to the tab
     await app.advance(10 * MIN);
     assert.equal((await app.tones()).length, FOCUS_NOTES); // waiting for Start: nothing further completes
@@ -60,7 +61,11 @@ test('§6: on a visible tab the Focus-end chime starts at the deadline and no la
   await withApp({ audioSpy: {} }, async (app) => {
     await app.start().click();
     const deadline = (await app.page.evaluate(() => Date.now())) + 25 * MIN; // the clock is paused: Start's instant
-    await app.advance(25 * MIN);
+    // Jump to 1 ms before the deadline, then let time RUN so the page's own render ticks fire at their
+    // real cadence. fastForward would fire one tick exactly at the target and hide any lag (review R1).
+    await app.advance(25 * MIN - 1);
+    assert.deepEqual(await app.tones(), []);
+    await app.page.clock.runFor(300);
     const tones = await app.tones();
     assert.equal(tones.length, FOCUS_NOTES);
     const lateBy = tones[0].at - deadline;
@@ -214,7 +219,7 @@ async function startHiddenWithClickTimes(app) {
   return app.page.evaluate(() => ({ t0: window.__t0, t1: window.__t1 }));
 }
 
-test('AC-06: hidden tab, real time — the wake-up alone completes the phase and the chime plays within 1 s, never before', async () => {
+test('AC-06: hidden tab, real time — the wake-up alone completes the phase and the chime is started within 1 s, never before', async () => {
   const app = await openApp(browser, HIDDEN_ONE_MINUTE);
   try {
     const { t0, t1 } = await startHiddenWithClickTimes(app);
@@ -223,9 +228,12 @@ test('AC-06: hidden tab, real time — the wake-up alone completes the phase and
     const tones = await app.tones();
     assert.equal(tones.length, FOCUS_NOTES);
     const at = tones[0].at;
+    // The engine records Start somewhere between t0 (before the app's click handler) and t1 (after
+    // it), so t0 + 60 s is the tightest safe "never early" bound and t1 + 60 s + 1 s the safe late
+    // bound. The engine's own unit tests pin "never early" exactly.
     assert.ok(at >= t0 + 60_000, `chime ${t0 + 60_000 - at} ms too early`);
     assert.ok(at <= t1 + 60_000 + 1000, `chime ${at - (t1 + 60_000)} ms after the deadline (limit 1000)`);
-    assert.equal(await app.title(), 'Ready · 5 min · Short break'); // title already shows the next phase
+    assert.equal(tones[0].title, 'Ready · 5 min · Short break'); // title on the next phase WHEN the chime starts (review R2)
   } finally {
     await app.context.close();
   }

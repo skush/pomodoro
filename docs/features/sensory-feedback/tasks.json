@@ -266,7 +266,7 @@
       "acs": [
         "AC-06"
       ],
-      "dod": "The AC-06 hidden-tab e2e stops the render loop before the app loads (addInitScript) and a companion check proves it fails when `Worker` is deleted; `_review/manual-timing-check.md` describes the test accurately; `npm run test:e2e` passes.",
+      "dod": "The AC-06 hidden-tab e2e stops the render loop before the app loads (addInitScript) and a companion check proves it fails with a dead worker (a `Worker` that accepts messages and never answers; deleting `Worker` would let the main-thread fallback finish the phase); `_review/manual-timing-check.md` describes the test accurately; `npm run test:e2e` passes.",
       "files_hint": [
         "test-e2e/sensory-feedback-chime.e2e.js",
         "test-e2e/helpers.js",

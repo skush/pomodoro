@@ -28,13 +28,13 @@ drag into the browser). In **desktop Chrome (current stable)**:
 2. Switch to another tab, and watch the clock. Note the wall-clock second at which the phase ends
    (Start time + 60 s) and the second at which the chime starts.
 3. Record the delay. Pass = the page starts the chime at or after the end and within 1 s of it (page-side timestamp, see the diagnostic below). Also note the audible delay by ear and the output device — for information, not pass/fail (AC-06 wording, decided 2026-09-30).
-4. Note whether the tab strip title read "Ready · 5 min · Short break" by the time the chime played.
+4. Note whether the tab strip title read "Ready · <Short-break minutes> min · Short break" (with the default 5-minute Short break: "Ready · 5 min · Short break") by the time the chime played.
 5. Repeat once with a 30 min or longer hidden run (Focus 30) if practical (the spec says "including
    after ≥ 30 min hidden").
 
 | Browser (version) | Date | Hidden duration | Chime delay after the true end | Title already next phase | Notes |
 |---|---|---|---|---|---|
-| Chrome (version: fill in) | 2026-09-30 | 1 min | Audible: about 1 s in the instrumented run (1–2 s in earlier runs), by ear. Page-side: tone scheduled +37 ms after the deadline | Yes (title changed in the same ms) | See "Diagnostic" below |
+| Chrome (version: fill in) | 2026-09-30 | 1 min | Audible: about 1 s in the instrumented run (1–2 s in earlier runs), by ear. Page-side: tone scheduled +37 ms after the deadline | Yes (logged 1 ms after the tone, but that is the `MutationObserver` firing after the synchronous `render()`, which sets the title first; the e2e checks the title at the moment the tone starts) | See "Diagnostic" below |
 | Chrome (version: fill in) | 2026-09-30 | 30 min | pending | pending | |
 | Firefox | — | — | — | — | Out of scope, deferred to a later feature (`docs/roadmap.md` step 6) |
 

@@ -33,7 +33,7 @@ advances with `Worker` deleted. So the test does not check the ADR-0001 wake-up 
 
 - [ ] Stop the render loop before the app script runs. Use `context.addInitScript` (or an `openApp` option in `helpers.js`) to make `setInterval` a no-op, or to record the interval ids so the test can clear them.
 - [ ] Keep the hidden `visibilityState` override. Keep the "never early" and "≤ 1 s late" bounds.
-- [ ] Add a negative control: with the same setup and `Worker` deleted, the phase must NOT complete within the 1 s window. This proves the worker is what completes it.
+- [x] Add a negative control: with the same setup and a dead worker (accepts messages, never answers), the phase must NOT complete within the 1 s window. This proves the worker is what completes it. (A deleted `Worker` is not a valid control: the main-thread fallback would then finish the phase.)
 - [ ] Correct the "What was verified automatically" section of `_review/manual-timing-check.md` to match.
 
 ## Definition of Done
