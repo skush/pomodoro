@@ -38,7 +38,7 @@ export async function launchBrowser() {
 // with a recording fake (see installAudioSpy) so a test can observe tones without hearing them.
 export async function openApp(
   browser,
-  { storage = {}, blockDurationWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null } = {},
+  { storage = {}, blockDurationWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null, realClock = false } = {},
 ) {
   const context = await browser.newContext({ viewport, reducedMotion });
   if (noAudio) {
@@ -64,6 +64,11 @@ export async function openApp(
     });
   }
   const page = await context.newPage();
+  if (realClock) {
+    // sensory-feedback: real time flows (the hidden-tab timing test); no fake clock.
+    await page.goto(INDEX_URL);
+    return { context, page, ...locators(page) };
+  }
   await page.clock.install({ time: START_TIME });
   await page.goto(INDEX_URL);
   // Freeze time so only advance() moves it — no real-time flow, fully deterministic.
@@ -95,7 +100,7 @@ export function installAudioSpy({ state = 'running' } = {}) {
       this.destination = {};
     }
     resume() {
-      this.state = state;
+      this.state = window.__audioState ?? state;
       return Promise.resolve();
     }
     createGain() {

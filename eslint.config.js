@@ -29,6 +29,8 @@ export default [
         // page.evaluate() callbacks run in the browser.
         fetch: 'readonly',
         getComputedStyle: 'readonly',
+        Event: 'readonly',
+        Notification: 'readonly',
         Worker: 'readonly',
         Blob: 'readonly',
         URL: 'readonly',
