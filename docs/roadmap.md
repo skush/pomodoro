@@ -23,7 +23,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | 2 | [Core timer engine + controls](features/core-timer/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 3 | [Session tracking (task label + daily counter)](features/session-tracking/spec.md) | `idea-brief.md` §1 Raw idea | XS | shipped |
 | 4 | [Adjustable durations + cycle length](features/adjustable-durations/spec.md) | `idea-brief.md` §7 Recommendation | S | shipped |
-| 5 | [Sensory feedback (progress ring, tab-title mirror, chime, dark UI)](features/sensory-feedback/spec.md) | `idea-brief.md` §1 Raw idea | S | spec'd |
+| 5 | [Sensory feedback (progress ring, tab-title mirror, chime, dark UI)](features/sensory-feedback/spec.md) | `idea-brief.md` §1 Raw idea | S | shipped |
 | 6 | Firefox support for the background chime (hidden-tab timing run, `file://` worker check) | [`sensory-feedback/spec.md`](features/sensory-feedback/spec.md) §3 | XS | fog |
 
 ## Not yet specified
@@ -81,3 +81,4 @@ flowchart LR
 | Core timer engine + controls | 2026-09-27 | [changelog](features/core-timer/CHANGELOG.md) · [review](features/core-timer/_review/review-2026-09-27.md) · `7060adb` |
 | Session tracking (task label + daily counter) | 2026-09-29 | [changelog](features/session-tracking/CHANGELOG.md) · [review](features/session-tracking/_review/review-2026-09-29.md) · `58fdc5b` |
 | Adjustable durations + cycle length | 2026-09-29 | [changelog](features/adjustable-durations/CHANGELOG.md) · [review](features/adjustable-durations/_review/review-2026-09-29.md) · `e7c77dd` |
+| Sensory feedback (ring, tab title, chime) | 2026-09-30 | [changelog](features/sensory-feedback/CHANGELOG.md) · [review](features/sensory-feedback/_review/review-2026-09-30.md) · PR pending |

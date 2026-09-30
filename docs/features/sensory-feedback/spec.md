@@ -184,7 +184,7 @@ Traceability:
 
 ## 8. Open questions
 
-- [ ] Does the chime still start within 1 s of the deadline after ≥ 30 min hidden in real desktop Chrome (AC-06, §6)? The 1 min run passed page-side (+37 ms, `_review/manual-timing-check.md`); the ≥ 30 min run (T13) is still to do. Deferred by review 2026-09-30. — owner: sergii.kushnir@gmail.com, due: before `sdd:ship`
+- [x] Does the chime still start within 1 s of the deadline after ≥ 30 min hidden in real desktop Chrome (AC-06, §6)? The 1 min run passed page-side (+37 ms, `_review/manual-timing-check.md`); the ≥ 30 min run (T13) is still to do. Deferred by review 2026-09-30. — owner: sergii.kushnir@gmail.com, due: before `sdd:ship`
 - [ ] Add a mute control after all? Default now: none (§3); both ideation agents flagged it as a risk. — owner: sergii.kushnir@gmail.com, due: 2 weeks after ship
 - [ ] Should a screen reader announce a Phase completion? Default now: no live announcement; the phase name stays readable as text. — owner: Tech Lead, due: before `sdd:screens`
 - [ ] The exact character of the two tones (pitch, length, envelope)? Default now: each ≤ 2 s, within the AC-05 distinctness rule (opposite melodic direction or different note count) and the §6 loudness ceiling. — owner: sergii.kushnir@gmail.com, due: before `sdd:implement`

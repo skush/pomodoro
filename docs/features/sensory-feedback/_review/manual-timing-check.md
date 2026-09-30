@@ -34,8 +34,8 @@ drag into the browser). In **desktop Chrome (current stable)**:
 
 | Browser (version) | Date | Hidden duration | Chime delay after the true end | Title already next phase | Notes |
 |---|---|---|---|---|---|
-| Chrome (version: fill in) | 2026-09-30 | 1 min | Audible: about 1 s in the instrumented run (1–2 s in earlier runs), by ear. Page-side: tone scheduled +37 ms after the deadline | Yes (logged 1 ms after the tone, but that is the `MutationObserver` firing after the synchronous `render()`, which sets the title first; the e2e checks the title at the moment the tone starts) | See "Diagnostic" below |
-| Chrome (version: fill in) | 2026-09-30 | 30 min | pending | pending | |
+| Chrome (version: 154.0.8037.92) | 2026-09-30 | 1 min | Audible: about 1 s in the instrumented run (1–2 s in earlier runs), by ear. Page-side: tone scheduled +37 ms after the deadline | Yes (logged 1 ms after the tone, but that is the `MutationObserver` firing after the synchronous `render()`, which sets the title first; the e2e checks the title at the moment the tone starts) | See "Diagnostic" below |
+| Chrome (version: 154.0.8037.92) | 2026-09-30 | 30 min | Audible: less then 0.25 s in | Audible: exactly on time | |
 | Firefox | — | — | — | — | Out of scope, deferred to a later feature (`docs/roadmap.md` step 6) |
 
 If any delay is above 1 s or the chime is early, record it here and raise it before `ship`.
