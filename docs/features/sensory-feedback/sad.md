@@ -364,6 +364,118 @@ one-shot `justCompleted` makes that single chime (or the notice) happen exactly 
 phase is idle, so nothing further completes unattended. `sequences` expands this and covers every
 §5 AC.
 
+**Participant legend for Flows 3-5.** Generic roles, mapped to the §5 blocks: `ui` = UI layer, `service` = Timer engine, `message-bus` = Wake-up worker (its only job is delivering the wake message), `external-system` = Audio output. Flows 1 and 2 predate this pass and keep the §5 block names, and they were left as drawn.
+
+### Critical flow 3 (diagram): After a device sleep, lock or frozen tab (AC-06b)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant UI as ui
+    participant Worker as message-bus
+    participant Engine as service
+    participant Audio as external-system
+
+    Note over UI,Engine: Precondition: a phase was running, the device slept or locked past its deadline, so no wake-up ran on time
+    Note over UI,Worker: whichever runs first once the page runs again: the overdue worker timeout, the render tick or visibilitychange
+    Worker->>UI: wake (overdue)
+    UI->>Engine: getSnapshot(now)
+    Engine->>Engine: settle - next phase loads waiting for Start, completion latched once
+    Engine-->>UI: next phase idle, justCompleted with phase and true moment
+    UI->>UI: set tab title to the next phase, ready
+    UI->>UI: ring full in the next phase colour
+    alt sound available (context running)
+        UI->>Audio: play the tone for the completed phase, once
+        Audio-->>User: Completion chime, late
+    else sound blocked or suspended
+        UI-->>User: sound-unavailable notice, chime is not held back for later
+    end
+    UI->>UI: credit the Session counter from justCompletedFocusAt (session-tracking, unchanged)
+    Note over UI,Worker: a second wake source finds justCompleted null, so no second chime
+    Note over UI,Engine: Postcondition: one chime or one notice, the next phase idle so nothing can complete unattended
+```
+
+### Flow 4: Render tick, ring and Tab title mirror (AC-01, AC-02, AC-03, AC-04)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant UI as ui
+    participant Engine as service
+
+    Note over UI,Engine: Precondition: any state - waiting for Start, running or paused - tab visible or hidden
+    UI->>Engine: getSnapshot(now)
+    Engine-->>UI: phase, running, idle, remainingMs, phaseFullMs, justCompleted
+    UI->>UI: title text from whole minutes rounded up, phase name, running or paused or ready
+    UI->>UI: ring fraction is the remaining whole second over phaseFullMs, phase colour from the phase type
+    UI-->>User: countdown, ring and phase name on the page, title in the tab strip
+    alt phase running
+        Note over UI: ring steps down once per second with the countdown, a short transition smooths each step
+        opt tab hidden
+            Note over UI: render ticks are throttled, so the title minutes may trail by up to 60 s between completions
+        end
+    else phase paused
+        Note over UI: ring frozen at the portion left, title marked paused with the frozen minutes
+    else waiting for Start after Reset or a newly loaded phase
+        Note over UI: ring full, title marked ready with the minutes the phase will run for
+    end
+    alt reduced motion requested
+        Note over UI: ring transitions removed, ring changes in discrete steps at most once per second
+    end
+    Note over UI,Engine: Postcondition: ring and countdown agree within 1 s, phase name always shown as text, no chime on any tick
+```
+
+### Flow 5: Duration or cycle-length commit (AC-07, AC-08, AC-09)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant UI as ui
+    participant Engine as service
+
+    Note over UI,Engine: Precondition: the User edits a duration field and commits a valid value
+    User->>UI: commits a new Configured duration or cycle length
+    UI->>Engine: setConfiguredDurations or setCycleLength
+    Note over UI: the committed value is persisted by adjustable-durations, unchanged and no new stored value from this feature
+    UI->>Engine: getSnapshot(now)
+    alt commit for a phase waiting for Start (idle)
+        Engine-->>UI: idle phase follows the live value, new remainingMs and new phaseFullMs
+        UI->>UI: ring full, title shows the new duration in whole minutes at once
+    else commit for a phase already started (running or paused)
+        Engine-->>UI: phaseFullMs still the value pinned at phase start, countdown unchanged
+        UI->>UI: ring keeps measuring against the pinned length, no jump and no stick
+        Note over Engine: after Reset the phase reloads with the new Configured duration and the ring is full for it
+    else invalid value
+        UI-->>User: inline validation message, nothing committed, ring and title unchanged
+    end
+    Note over UI: no chime on a commit and no wake-up rearmed, since the deadline is untouched
+    Note over UI,Engine: Postcondition: ring and title agree with the on-page countdown
+```
+
+**AC and use-case coverage (`sequences` step 7).**
+
+| Story or AC | Shown by |
+|---|---|
+| US-01 (AC-01, AC-02, AC-08) | Flow 4 (ring steps, frozen on pause, full when waiting) and Flow 5 (pinned length) |
+| US-02 (AC-03) | Flow 4 (phase colour from the phase type, phase name as text) |
+| US-03 (AC-04, AC-09) | Flow 4 (title states, hidden trailing tolerance) and Flow 5 (waiting phase shows the new minutes at once) |
+| US-04 (AC-05, AC-07, AC-10, AC-11) | Flow 1 (tone per phase type, completion crediting), Flow 2 (no chime on controls, notice at Start or Resume) and Flow 5 (no chime on commit) |
+| US-05 (AC-06, AC-06b) | Flow 1 (hidden tab wake-up) and Flow 3 (after sleep) |
+| US-06 (AC-13) | Non-runtime N/A: a layout and contrast property checked by the 320 CSS px e2e and the palette unit test, not a message flow |
+| AC-12 | Non-runtime N/A: a property of what is never called (no permission API, no network), verified by the zero-request e2e. Flow 2 shows sound unlocked by the User's own press |
+| AC-10 midnight edge | Crediting rules stay in session-tracking (`justCompletedFocusAt`), Flow 1 shows only that the counter is credited from it |
+
+**Async steps (`sequences` step 4).** The wake-up is an in-page timer nudge, not a webhook, queued job or third-party callback, so the async template does not apply in full. Its three parts are covered differently. The idempotency check is the engine's one-shot `justCompleted`: every wake source (worker, render tick, visibilitychange) reads the same snapshot, and only the first read returns the completion (Flows 1 and 3). There is no retry, because an early or missed wake-up is harmless: the next render tick or wake looks at the same wall-clock deadline. There is no dead-letter branch, because nothing is dropped: if the worker cannot start, ADR-0001's main-thread fallback still plays the chime, possibly late.
+
+**Flags for `design` (none block).**
+- No participant outside §5 was needed.
+- Flow 5 covers a cycle-length commit as the same shape as a duration commit, so there is nothing new to record.
+- This feature persists nothing, so §6 gives `data-model` no index hint, and `data-model` recorded no schema change.
+- Block order: the existing Flows 1 and 2 stay where they were, and the new flows follow in number order. Story-to-flow order lives in the coverage table above, so no drawn block was moved.
+
 ## 7. Deployment view
 
 <!-- N/A: reuses the existing single-file deployment unit — index.html generated by `npm run build`
