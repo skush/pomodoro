@@ -31,7 +31,7 @@ During the running break, after the Skip guard: the Start focus button was press
 
 The three fixed slots read side-1 | main | side-2 at 900 px and at 320 px (labels wrap to two lines, every state keeps one row height). Found and fixed on the way: the control row used to shrink to its labels and shift with every state change (caught by the existing display-width e2e); the phase-name focus outline now uses `:focus-visible`, so it shows for keyboard users and not after a mouse press.
 
-## Not done — to do by hand
+## Done by hand (owner)
 
 **Return-after-sleep (spec §7 KPI 4, AC-03, §6 "Chimes per completion"): PASS under the changed requirement (owner run, 2026-10-01). See the results table below.** It could not be run from the implementation session, so the owner ran it by hand. The *logic* is covered automatically — a clock jump past the Focus end leaves the break waiting at full length with no break-end chime, and with one Focus-end chime when it is within 2 minutes or none (and no notice) when later, for a Short and a Long break (`test-e2e/break-flow.e2e.js`, AC-03 tests, and `test/logic/ui-autostart.test.js`) — but a jump of a fake clock is not a real sleep.
 

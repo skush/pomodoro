@@ -156,7 +156,7 @@ C4Context
 
     Rel(user, app, "Presses controls, toggles settings, reads ring, countdown and tab title", "DOM events / tab strip")
     Rel(app, browser, "Reads wall-clock time and visibility, renders the DOM, moves keyboard focus, saves two preferences", "JS APIs")
-    Rel(app, audio, "Plays the Focus-end or break-end tone at each completion", "Web Audio API")
+    Rel(app, audio, "Plays the Focus-end or break-end tone at each completion, unless stale", "Web Audio API")
     Rel(audio, user, "Completion chime", "sound")
 ```
 
@@ -374,8 +374,8 @@ sequenceDiagram
 The page notices the Focus end through whichever wake source runs first. If Auto-start breaks is
 on and the end was noticed within 5 s, the UI re-reads the saved durations, starts the break
 backdated to the true Focus end, and re-arms the wake-up for the break. Otherwise the break stays
-waiting at full length. In both cases the session credit, and the Focus-end chime (or the notice) unless the completion is
-stale (more than 2 minutes after its true end: neither), come once, from the snapshot that carried the completion. The ring, title and controls show what
+waiting at full length. In both cases the session credit comes once, and so does the Focus-end chime (or the notice)
+unless the completion is stale (more than 2 minutes after its true end: neither), from the snapshot that carried the completion. The ring, title and controls show what
 is now on screen. When an auto-started break later reaches zero, the existing completion path runs
 again and leaves Focus waiting, because only a Focus completion enters the auto-start branch
 (AC-02).

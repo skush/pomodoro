@@ -46,10 +46,10 @@ flowchart TD
     F -->|sound cannot play| G[Sound-unavailable notice shown at auto-start]
     G --> H[SCR-05 Break running]
     F -->|no problem| H
-    H -->|break reaches zero| I[SCR-01 Focus waiting - break-end chime]
+    H -->|break reaches zero| I[SCR-01 Focus waiting - break-end chime unless stale]
 ```
 
-When a Focus phase reaches zero, the Focus-end chime plays and the session is credited. If Auto-start breaks is off, the break appears waiting at full length (SCR-04). If it is on and the completion was noticed on time, the right break (Short or Long) starts counting down by itself (SCR-05) with the ring, tab title and phase name showing it running; if sound can't be played, the notice appears right then. If the completion was noticed late, it falls to the US-05 flow instead. When the running break reaches zero, the break-end chime plays (unless the end is only noticed more than 2 minutes late) and Focus is shown waiting (SCR-01) — Focus never starts by itself.
+When a Focus phase reaches zero, the Focus-end chime plays (if the end is noticed late, see US-05 — with Auto-start breaks on or off) and the session is credited. If Auto-start breaks is off, the break appears waiting at full length (SCR-04). If it is on and the completion was noticed on time, the right break (Short or Long) starts counting down by itself (SCR-05) with the ring, tab title and phase name showing it running; if sound can't be played, the notice appears right then. If the completion was noticed late, it falls to the US-05 flow instead. When the running break reaches zero, the break-end chime plays (unless the end is only noticed more than 2 minutes late) and Focus is shown waiting (SCR-01) — Focus never starts by itself.
 
 ### Flow: US-02 — Leave a break early for Focus
 

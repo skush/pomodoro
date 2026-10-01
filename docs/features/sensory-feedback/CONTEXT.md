@@ -1,6 +1,6 @@
 ---
 status: Living
-updated_at: "2026-09-29"
+updated_at: "2026-10-01"
 ---
 
 # Domain Context — sensory-feedback

@@ -2,7 +2,7 @@
 status: Draft
 owner: "sergii.kushnir@gmail.com"
 reviewers: ["Tech Lead"]
-updated_at: "2026-09-30"
+updated_at: "2026-10-01"
 feature_size: "S"
 target_surfaces: [web-frontend]  # filled in §4 — subset of: backend-service | web-frontend | mobile-app | desktop-app | cli | worker | library-sdk. Read (never re-derived) by api/sequences/tasks/plan-tests/review → _shared/surfaces.md
 ---
@@ -16,7 +16,7 @@ target_surfaces: [web-frontend]  # filled in §4 — subset of: backend-service 
 ## 1. Introduction and goals
 
 **Intent.** sensory-feedback adds the eyes-off cue layer the timer has lacked since core-timer. A
-Completion chime with a distinct Focus-end tone and break-end tone plays at every Phase completion,
+Completion chime with a distinct Focus-end tone and break-end tone plays at every Phase completion (not for a stale one, AC-06b),
 including while the tab is in the background of an awake desktop browser. A Progress ring, coloured
 per phase type, depletes against the length the phase started with. The Tab title mirror shows the
 remaining whole minutes, the phase, and whether the timer is running, paused or waiting for Start.
@@ -208,7 +208,7 @@ out of sight. There are no network edges.
    Start/Resume press, and checked at unlock and at each completion.** The context is created on
    the first Start and `resume()`d on every Start/Resume, which is the User's gesture, so there's
    no permission prompt (AC-12). If it is missing or not `running` right after that, or at a
-   completion, the sound-unavailable notice shows and **no chime is queued for later** (AC-11,
+   completion that is not stale (AC-06b), the sound-unavailable notice shows and **no chime is queued for later** (AC-11,
    AC-06b). A later Start/Resume that finds it `running` hides the notice. Low blast radius,
    contained in `src/ui/audio.js`, so it stays inline.
 6. **Cue rules as pure data and functions in `src/logic/`, rendering in `src/ui/`.** Tones are note

@@ -2,7 +2,7 @@
 status: Draft
 owner: "sergii.kushnir@gmail.com"
 reviewers: ["Tech Lead", "Security Lead"]
-updated_at: "2026-09-30"
+updated_at: "2026-10-01"
 feature_size: "S"
 ---
 
@@ -117,7 +117,7 @@ Traceability:
 ### AC-07 (US-04) — domain invariant
 **Given** the User is using the timer
 **When** they press Start, Pause, Resume or Reset, or commit a duration or cycle-length change
-**Then** no chime plays — the Completion chime plays only at a Phase completion, and exactly once per completion, except a stale one (AC-06b) (never again when the User returns to the tab); a Pause or Reset pressed an instant before zero means that phase does not complete, so its chime never plays
+**Then** no chime plays — the Completion chime plays only at a Phase completion, and exactly once per completion (never again when the User returns to the tab), except a stale one (AC-06b); a Pause or Reset pressed an instant before zero means that phase does not complete, so its chime never plays
 
 ### AC-08 (US-01) — domain invariant
 **Given** a phase is running or paused, and the User commits a new Configured duration for that same phase type
