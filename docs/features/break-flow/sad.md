@@ -242,13 +242,16 @@ as before.
 ```
 src/
 ├── logic/
-│   ├── index.js      <createTimerEngine(): + startFocus(now) (ends a break or starts a waiting
-│   │                  Focus; no-op inside the Skip guard or while Focus is running/paused),
-│   │                  + setAllowPausingFocus(on); pause(now) is a no-op for a running Focus while
-│   │                  pausing isn't allowed; start(now) records startedAt on a fresh start (now may
-│   │                  be the backdated true Focus end, ADR-0001); reset clears it. Snapshot +
-│   │                  startedAt, + allowPausingFocus. settle() unchanged: one boundary, next phase
-│   │                  idle (ADR-0002). controlStates removed in favour of controlLayout.>
+│   ├── index.js      <createTimerEngine(): + startFocus(now) (break-only: ends a running, paused
+│   │                  or waiting break and starts the next Focus; no-op inside the Skip guard and
+│   │                  in any Focus state; Start focus on a waiting Focus (SCR-01) goes through the
+│   │                  existing start(now)), + setAllowPausingFocus(on); pause(now) is a no-op for a
+│   │                  running Focus while pausing isn't allowed; start(now) records startedAt on a
+│   │                  fresh start (now may be the backdated true Focus end, ADR-0001). settle() and
+│   │                  reset() both clear startedAt, so a waiting phase never carries a Skip guard
+│   │                  (AC-05). Otherwise settle() keeps its rule: one boundary, next phase idle
+│   │                  (core-timer AC-05, kept by ADR-0001). Snapshot + startedAt,
+│   │                  + allowPausingFocus. controlStates removed in favour of controlLayout.>
 │   └── controls.js   <NEW, pure, re-exported from index.js: ON_TIME_TOLERANCE_MS = 5000,
 │                      SKIP_GUARD_MS = 3000, isOnTimeCompletion(at, now), isSkipGuardActive(snapshot,
 │                      now), controlLayout(snapshot, now) → {main, side: [a, b], mainGreyed}
@@ -263,7 +266,12 @@ src/
 │   │                  toggles next to the durations; the third storage gatekeeper
 │   │                  persistBreakFlowSettings / readPersistedBreakFlowSettings; render() gains the
 │   │                  auto-start branch (ADR-0001, §6 Flow 1) and re-arms the wake-up after it;
+│   │                  lastSnapshot is set to the display snapshot (B after an auto-start), so the
+│   │                  wake-up callback's syncWakeup(lastSnapshot) keeps the break's alarm armed;
 │   │                  prepareStart() learns that Start focus from a break is a fresh Focus start.
+│   │                  The Start focus, Start break and Resume focus/break handlers call
+│   │                  unlockSound() synchronously first, the presses that now unlock audio in place
+│   │                  of the old Start (sensory-feedback AC-11), so a later auto-start can chime.
 │   │                  Still the ONLY caller of the engine's methods (core-timer ADR-0002).>
 │   ├── controls.js   <NEW: createControls(onAction) → {element, update(layout)}: three fixed slot
 │   │                  buttons (main, side-1, side-2); label + data-action from the layout; hidden
@@ -281,7 +289,11 @@ src/
 test/logic/
 ├── timer-engine.test.js  <amended: engine surface pin 6 → 8 methods, snapshot shape + startedAt
 │                          + allowPausingFocus; controlStates tests replaced by controlLayout>
-├── write-guard.test.js   <amended: third gatekeeper allowed for the two break-flow keys>
+├── write-guard.test.js   <amended: third gatekeeper allowed for the two break-flow keys; the
+│                          pre-start-correction call-site pins (prepareStart only via
+│                          refreshConfigFromStorage, called exactly once, from the startBtn handler,
+│                          before engine.start) are re-pinned to the three legitimate triggers:
+│                          the Start break and Start focus handlers and the auto-start step>
 └── break-flow.test.js    <NEW: On-time 5 s / 5.001 s, backdated-start accuracy, Skip guard,
                            startFocus, pause policy, controlLayout table, stored-toggle fallback>
 test-e2e/break-flow.e2e.js <NEW: fake-clock auto-start, return-after-sleep, Start focus, focus moves>
@@ -380,6 +392,7 @@ sequenceDiagram
 
     Note over UI: a break is running, paused or waiting, and the main slot shows Start focus
     User->>UI: presses Start focus
+    UI->>UI: unlockSound inside this press (same as Start break and Resume)
     UI->>Store: pre-start correction for the fresh Focus (running break untouched)
     UI->>Engine: startFocus(now)
     alt Skip guard active (under 3 s since startedAt)
@@ -409,7 +422,7 @@ AC-15/AC-17 (focus-pause policy) and AC-11 (keyboard focus).
 | Concept | Convention | Where defined |
 |---|---|---|
 | Time | Every rule is a pure function of wall-clock timestamps passed in as `now`: the deadline, the On-time check (`now − at ≤ 5000 ms`), the Skip guard (`now − startedAt < 3000 ms`, real time, pause doesn't stop it). No tick counting. Tests inject the clock | core-timer ADR-0001; here §4 decisions 3, 4, 6 |
-| One-shot consumption | One render may take two snapshots when it auto-starts a break. Snapshot A (with the completion) feeds the chime/notice and the Session counter credit. The display snapshot (B after an auto-start, else A) feeds the title, ring, controls and wake-up. Fixed order: getSnapshot A → auto-start (correction, `start(at)`, getSnapshot B, re-arm wake-up) → title → ring → chime/notice → credit → controls → keyboard focus | sensory-feedback §8, amended by ADR-0001 |
+| One-shot consumption | One render may take two snapshots when it auto-starts a break. Snapshot A (with the completion) feeds the chime/notice and the Session counter credit. The display snapshot (B after an auto-start, else A) feeds the title, ring, controls and wake-up, and it is what `lastSnapshot` holds when `render()` returns, so the wake-up callback's `syncWakeup(lastSnapshot)` never cancels the alarm the auto-start armed. Fixed order: getSnapshot A → auto-start (correction, `start(at)`, getSnapshot B, re-arm wake-up) → title → ring → chime/notice → credit → controls → keyboard focus | sensory-feedback §8, amended by ADR-0001 |
 | Input guard (authorization) | The engine changes only through methods called by `src/ui/` from this page's own controls, toggles and duration/cycle commits, plus the auto-start branch. There is no `message`/`storage` listener and no `BroadcastChannel`. Both settings are read from storage only at mount, so another tab's saved values apply at the next load (AC-12). Saved durations keep their read points (load + before each fresh start, now including an auto-start and Start focus) | core-timer ADR-0002 (amended by ADR-0002 here) |
 | Persistence | A third gatekeeper, `persistBreakFlowSettings(storage, {autoStartBreaks, allowPausingFocus})`, is the only writer of `break-flow:auto-start-breaks` and `break-flow:allow-pausing-focus` and always writes both, as `'true'`/`'false'`. `readPersistedBreakFlowSettings(storage)` validates each key on its own through `validateStoredToggle(raw, fallback)` and does no write-back; the next toggle writes the full pair. `write-guard.test.js` is extended to allow it | session-tracking ADR-0002, adjustable-durations ADR-0002 |
 | Error handling | Fail-soft. Unreadable, missing or invalid saved value → that setting's default (Auto-start breaks on, Allow pausing focus off). A refused write is swallowed, and the in-memory value applies for the rest of the page load. No error is ever shown (AC-09). A refused Start focus (Skip guard) or pause (policy off) is a silent no-op | `CLAUDE.md`; `spec.md` AC-09 |
@@ -481,9 +494,9 @@ Each top-3 goal from §1 expanded into scenarios. Numbers are quoted from `spec.
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
 | The render-orchestration order (ADR-0001) is easy to break: taking the display snapshot first, or reading the chime from snapshot B, would drop the Focus-end chime or the session credit, or play it twice | Medium | Extract the auto-start step into an exported, injectable function in `src/ui/` (like `applyCompletionCue`) with a unit test asserting one chime + one credit + break running. The e2e auto-start test covers the wired path | Tech Lead |
-| The wake-up worker isn't re-armed after an auto-start that happened in a render tick, so the break-end chime is late if the tab is hidden afterwards | Medium | The auto-start step calls `syncWakeup` with the display snapshot (§6 Flow 1). There's a unit test for it | Tech Lead |
+| The wake-up for an auto-started break is lost, so its break-end chime is late in a hidden tab. Two paths: a render-tick auto-start that never re-arms, and the worker-wake callback's `syncWakeup(lastSnapshot)` cancelling the new alarm if `lastSnapshot` still holds snapshot A (waiting break) | Medium | The auto-start step calls `syncWakeup` with the display snapshot, and `lastSnapshot` is set to that display snapshot (§5, §8 One-shot consumption). Tests cover both the render-tick path and the worker-wake path, asserting the alarm stays armed for the break | Tech Lead |
 | A present User in a background tab of a browser outside the background timing promise (e.g. Firefox) gets a late completion, so the break waits instead of auto-starting | Low | Accepted by `spec.md` AC-01. Firefox background timing stays a parked roadmap item | PM (sergii.kushnir@gmail.com) |
-| Amending pinned contracts: the engine surface goes from 6 to 8 methods, the snapshot shape grows, `controlStates`/`refocusIfStranded` are removed, and the e2e helpers and scripts (`test-e2e/helpers.js`, `durations.e2e.js`, `sensory-feedback-chime.e2e.js`) select buttons labelled Start/Pause/Reset | Low | ADR-0002 records the amendment of core-timer ADR-0002. `tasks` includes updating the pins and the existing e2e selectors to the phase-labelled controls | Tech Lead |
+| Amending pinned contracts: the engine surface goes from 6 to 8 methods, the snapshot shape grows, `controlStates`/`refocusIfStranded` are removed, and the e2e helpers and scripts (`test-e2e/helpers.js`, `durations.e2e.js`, `sensory-feedback-chime.e2e.js`) select buttons labelled Start/Pause/Reset, and `write-guard.test.js` pins the pre-start correction to the single `startBtn` handler | Low | ADR-0002 records the amendment of core-timer ADR-0002. `tasks` includes updating the pins, re-pinning the pre-start correction to the Start break / Start focus handlers and the auto-start step (§5), and moving the existing e2e selectors to the phase-labelled controls | Tech Lead |
 | The pause toggle reading of AC-11 (§1 ¶4) depends on Pause and Resume sharing one slot in the final arrangement | Low | `screens` keeps them in one slot. `controlLayout` returns them at the same index | PM (sergii.kushnir@gmail.com) |
 | `spec.md` §8 open questions still owned by the PM: a 3 s Skip guard long enough (due 7 days after ship), a harder-to-skip Long break (due before `tasks`), Reset focus confirmation (due before `screens`) | Low | Each lands as a constant or layout change (ADR-0002 Neutral, ADR-0003). No design rework | PM (sergii.kushnir@gmail.com) |
 | `docs/architecture-map.md` is stale (`reflects_commit 9c8717e`, 114 commits behind) | Low | This SAD was drafted from a direct read of `HEAD`. Run `/sdd:survey` after this feature ships | Tech Lead |

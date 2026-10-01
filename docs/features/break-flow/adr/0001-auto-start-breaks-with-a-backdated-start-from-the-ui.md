@@ -74,7 +74,9 @@ the engine own a UI preference.
   only `src/ui/` calls it, but it's a new kind of call a reader may not expect.
 - The auto-start branch must also re-arm the wake-up worker, because a render from the interval
   tick doesn't re-arm it today. Without that, the break-end chime of a break that auto-started in
-  a visible tab could be late once the tab is hidden.
+  a visible tab could be late once the tab is hidden. `lastSnapshot` must also hold the display
+  snapshot (B), because the wake-up worker's callback re-arms from it. If it held snapshot A (a
+  waiting break), that call would cancel the alarm the auto-start just armed.
 
 **Neutral**
 - If a future feature wants Focus to auto-start too, it adds a second branch here. The engine

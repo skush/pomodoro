@@ -176,6 +176,8 @@ These lists are complete: a waiting phase shows no pause or reset control. A con
 **When** the set of controls changes — after a press, or without one (a break auto-starts, a phase completes, the Skip guard ends, a setting hides a control)
 **Then** keyboard focus is never left on a control that disappeared or became unavailable: it moves to the main position — within the Skip guard that is the greyed-out Start focus, which can still hold keyboard focus, so a reflex key press does nothing — and when the main position is empty (Focus running with Allow pausing focus off) it moves to the phase name and countdown, never onto Reset focus; keyboard focus that is anywhere else (the Task label, a duration field, a setting) is never moved; the phase change is announced the way phase changes already are
 
+> **Design note (2026-10-01, owner):** Pause *X* and Resume *X* of the same phase count as **one pause toggle control** in one position. After Pause break or Pause focus, keyboard focus stays on that control, which now reads Resume, and does not move to the main position. A reflex double press therefore pauses and resumes, and can't skip the break (§7 KPI). Every other control that disappears moves focus as written above. See `sad.md` §1 ¶4 and `adr/0003-derive-controls-from-a-pure-layout-rendered-into-fixed-slots.md`.
+
 ### AC-12 (US-01, US-02, US-03, US-04, US-07) — authorization
 
 **Given** a User's page is open

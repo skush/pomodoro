@@ -50,7 +50,8 @@ clock. Recording `startedAt` at each fresh start (and keeping it through pause a
 the guard exactly the spec's measuring points: the true Focus end for an auto-started break
 (ADR-0001 passes it to `start`), and the Start break press for a User-started one. A paused break
 keeps its `startedAt`, so a pause can't extend the guard. Resume isn't a fresh start, so it starts
-no new guard, and Reset clears it, leaving the waiting break with no guard. Option 2 leaves the
+no new guard. Reset clears it, and so does a completion (`settle()`), so a waiting break never
+carries a guard. `startFocus` is break-only; Start focus on a waiting Focus goes through `start`. Option 2 leaves the
 rules to the order of the UI code. A direct engine call, or a future second caller, would bypass
 both.
 

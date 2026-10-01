@@ -127,6 +127,8 @@ flowchart TD
 
 Every control carries its phase in its label (Start/Pause/Resume/Reset focus, Start/Pause/Resume/Reset break), and the phase name stays visible. Whenever the set of controls changes — by a press, or on its own (auto-start, completion, guard ending, a setting hiding a control) — keyboard focus that was on a control that's gone moves to the main position; inside the Skip guard that's the greyed-out Start focus, which can still hold focus so a reflex key press does nothing. If the main position is empty (Focus running, pausing not allowed), focus goes to the phase name and countdown, never to Reset focus. Keyboard focus anywhere else is never moved. The phase change is announced the way phase changes already are.
 
+> **Design note (2026-10-01, owner):** Pause *X* ↔ Resume *X* of the same phase is one pause toggle in one position. After Pause break or Pause focus, keyboard focus stays on it (now reading Resume) rather than moving to the main position, so a double press can't skip the break. See `sad.md` §1 ¶4 and ADR-0003.
+
 ### Flow: US-07 — Keep Focus sessions undisturbed
 
 ```mermaid
