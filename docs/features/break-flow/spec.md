@@ -235,6 +235,7 @@ These lists are complete: a waiting phase shows no pause or reset control. A con
   - a hand-edited or corrupted saved value: read as that setting's default, never an error (AC-09).
   - a pause of Focus forced past the hidden control while pausing is not allowed: does nothing (AC-15).
   - rapid pressing of Start focus right after a break starts, automatically or by Start break: absorbed by the Skip guard (AC-05); redundant presses otherwise stay no-ops.
+  - with Allow pausing focus on, Start focus and Pause focus share the main slot (ADR-0003, AC-11), so a mouse double-click on Start focus starts the Focus and then pauses it: accepted — the pause is undone with Resume focus, nothing is lost, and the setting is off by default (review round 2, D).
 - **Security review:** N/A — no new data beyond two preferences, no network access, no permission boundary.
 
 ## 7. Metrics / KPIs

@@ -480,10 +480,28 @@ test('review #3 (AC-14/AC-11): a break auto-starting does not wipe text being ty
     await app.shortBreakField().fill('7'); // typed, not yet committed
     await app.advance(MIN + 1000); // the Focus ends and the break auto-starts
     assert.equal(await app.phase(), 'Short break');
+    assert.equal(await app.countdown(), '4:59'); // the uncommitted 7 stayed out of the break
     assert.equal(await app.shortBreakField().inputValue(), '7');
     await app.shortBreakField().press('Enter'); // the User's own commit still lands
     assert.equal(await app.shortBreakField().inputValue(), '7');
+    assert.equal(await app.countdown(), '4:59'); // and does not change the break already running
     assert.equal((await app.storage())['adjustable-durations:short-break-duration'], '7');
+  });
+});
+
+test('review round 2 (AC-12/AC-14): a focused field the User has not edited shows a corrected stored value, and leaving it writes nothing different', async () => {
+  await withApp({}, async (app) => {
+    await app.startFocus().click();
+    await app.advance(24 * MIN);
+    await app.shortBreakField().click(); // focused, nothing typed
+    await app.page.evaluate(() => window.localStorage.setItem('adjustable-durations:short-break-duration', '10')); // another tab saved 10
+    await app.advance(MIN + 1000); // the Focus ends and the break auto-starts on the stored 10
+    assert.equal(await app.phase(), 'Short break');
+    assert.equal(await app.countdown(), '9:59');
+    assert.equal(await app.shortBreakField().inputValue(), '10'); // the field shows what is in effect
+    await app.shortBreakField().press('Enter'); // leaving it must not write the old 5 back
+    assert.equal((await app.storage())['adjustable-durations:short-break-duration'], '10');
+    assert.equal(await app.shortBreakField().inputValue(), '10');
   });
 });
 

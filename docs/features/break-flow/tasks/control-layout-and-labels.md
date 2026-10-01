@@ -45,7 +45,7 @@ Turns the AC-10 control table into one tested function with phase-named labels, 
 >
 > — `sad.md §11 row 5 + adr/0003 Consequences, abridged` · full text: [adr/0003-derive-controls-from-a-pure-layout-rendered-into-fixed-slots.md](../adr/0003-derive-controls-from-a-pure-layout-rendered-into-fixed-slots.md)
 
-> **Arrangement fixed at breakdown** (no `screens` stage ran — route `quick`, no `screens.md`): Focus waiting → main `startFocus`, side `[]`. Focus running → main `pauseFocus` (only if allowed, else `null`), side `[resetFocus]`; Focus paused → main `resumeFocus`, side `[resetFocus]`. Break waiting → main `startBreak`, side `[startFocus]`. Break running/paused → main `startFocus` (`mainGreyed` inside the guard), side `[pauseBreak|resumeBreak, resetBreak]` — the pause toggle is always `side[0]`, `resetBreak` always `side[1]`. After Reset break, `startFocus` therefore lands at `side[0]`, never at the `side[1]` Reset break left. Spec §8 open question "harder-to-skip Long break": assumed **no** (same guard for Short and Long).
+> **Arrangement fixed at breakdown** (no `screens` stage ran — route `quick`, no `screens.md`): Focus waiting → main `startFocus`, side `[]`. Focus running → main `pauseFocus` (only if allowed, else `null`), side `[null, resetFocus]`; Focus paused → main `resumeFocus`, side `[null, resetFocus]` — Reset focus is always `side[1]`, so it never shares a slot with Start focus (`side[0]` of a waiting break; review round 1 #4). Break waiting → main `startBreak`, side `[startFocus]`. Break running/paused → main `startFocus` (`mainGreyed` inside the guard), side `[pauseBreak|resumeBreak, resetBreak]` — the pause toggle is always `side[0]`, `resetBreak` always `side[1]`. After Reset break, `startFocus` therefore lands at `side[0]`, never at the `side[1]` Reset break left. Spec §8 open question "harder-to-skip Long break": assumed **no** (same guard for Short and Long).
 >
 > — `tasks breakdown decision, derived from spec.md §5 AC-10 + adr/0003` · full text: [spec.md](../spec.md)
 
@@ -109,7 +109,7 @@ Internal — no API surface.
 
 | Case | Behaviour |
 |---|---|
-| Focus running, `allowPausingFocus` off | `main: null`, `side: [resetFocus]` — Reset focus never in main |
+| Focus running, `allowPausingFocus` off | `main: null`, `side: [null, resetFocus]` — Reset focus never in main |
 | Focus paused with the policy now off | Still `resumeFocus` + `resetFocus` (a phase in progress is never altered) |
 | Break paused inside the guard | `startFocus` greyed in main; `resumeBreak`, `resetBreak` beside it |
 | Break waiting | No pause/reset control; no guard |
