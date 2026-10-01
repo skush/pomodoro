@@ -251,3 +251,71 @@ These lists are complete: a waiting phase shows no pause or reset control. A con
 - [ ] Is a 3 s Skip guard long enough to absorb the old habit without making a deliberate skip feel blocked? Default now: 3 s; revisit after the first 7 days of use. — owner: PM (sergii.kushnir@gmail.com), due: 7 days after ship
 - [ ] Should a Long break be harder to skip than a Short break (e.g. a longer Skip guard)? Default now: no — same rules for both. — owner: PM (sergii.kushnir@gmail.com), due: before `sdd:tasks`
 - [ ] Should Reset focus ask for confirmation when it would discard a long stretch of Focus? Default now: no — it acts at once, and is kept out of the main position instead. — owner: PM (sergii.kushnir@gmail.com), due: before `sdd:screens`
+
+## Test plan
+
+Every §5 criterion maps to ≥1 test. Unit tests run against the pure logic with an injected clock; component and e2e-through-UI rows are verified by hand in a real browser (the repo has no automated UI harness — `docs/architecture-map.md`), unless `implement` finds one worth adding.
+
+### AC coverage
+
+| AC (spec.md §5) | Test name (intent-based) | Level | Expected outcome |
+|---|---|---|---|
+| AC-01 happy path | on-time focus completion auto-starts the correct break from its full length | unit | one chime, completion credited once, break running; remaining time within 1 s of (full length − time since the focus end); length re-read from current Configured duration |
+| AC-01 happy path | auto-started break shows running ring and tab title | e2e-through-UI | focus ends in an open tab → break phase name, full-then-shrinking ring and running title appear with no press |
+| AC-02 domain invariant | finished break leaves the next focus waiting, with auto-start on or off | unit | break-end chime once; focus at full length, stopped; never started by itself |
+| AC-03 cross-context | late focus completion leaves the break waiting at full length, including a long break | unit | completion noticed after 5.001 s → one focus-end chime, break waiting, no countdown, no break-end chime |
+| AC-03 cross-context | returning after sleep shows a waiting break | e2e-through-UI | after the device sleeps past the focus end, the page shows the break waiting with Start break and Start focus offered |
+| AC-04 happy path | start focus ends a short, long, running, paused or waiting break at once | unit | break ends silently; focus running from the current Configured focus duration |
+| AC-04 happy path | start focus during a break switches the screen to focus | e2e-through-UI | focus shown running within 250 ms of the press |
+| AC-04b domain invariant | a skipped break changes no counters and does not move the long break | unit | in-cycle count and Session counter unchanged; long-break timing unchanged; skipped long break restarts the cycle at its first focus |
+| AC-05 error | start focus inside the skip guard does nothing | unit | press ignored at 2.99 s, accepted at 3.0 s+ of real time; guard holds across pause, resume starts none, reset leaves the break waiting with no guard |
+| AC-05 error | start focus is greyed out and focusable while guarded | component | greyed out in the main position for both running and paused break; becomes available on its own after 3 s |
+| AC-06 happy path | break controls act only on the break | unit | pause freezes, resume continues exactly, reset returns to full Configured length stopped, start break starts it; none starts focus |
+| AC-06 happy path | each break state offers its listed controls | component | running → Pause/Reset break; paused → Resume/Reset break; waiting → Start break; Start focus present in all |
+| AC-07 happy path | auto-start breaks setting defaults on, persists, applies at next completion | unit | default on with nothing saved; saved choice survives reload; a running phase is not altered by a change |
+| AC-07 happy path | auto-start breaks setting sits next to the duration settings | component | setting visible beside the durations and reflects the stored value |
+| AC-08 happy path | focus completion with auto-start off leaves the break waiting | unit | break at full length, waiting; Start break in the main position with Start focus beside it |
+| AC-09 error | missing, unreadable or invalid saved values fall back to defaults | unit | auto-start on, allow-pausing off; no error thrown |
+| AC-09 error | browser refusing to save still applies the change for this load | component | change takes effect in the page, no error shown, page keeps working |
+| AC-10 domain invariant | control layout matches the lists for every phase, state and setting combination | unit | each state yields exactly the listed controls in the listed positions; no bare Start/Pause/Resume/Reset label; waiting phases have no pause or reset; only Start focus is ever greyed out; Start focus never lands where Reset break was |
+| AC-11 domain invariant | keyboard focus never rests on a vanished or unavailable control | component | moves to the main position (greyed Start focus inside the guard), or to phase name and countdown when it is empty, never to Reset focus; pause toggle keeps focus after pressing; focus in the label, duration or setting fields is left alone |
+| AC-12 authorization | inputs not from this page's own controls are ignored | unit | foreign messages and other tabs' saved setting values do not change the timer or the settings in use until the next load |
+| AC-12 authorization | new controls and settings reach the engine only via the page's own handlers | component | no new input path exists besides the page's controls and commits |
+| AC-13 cross-context | auto-started break gives full cues | component | ring starts full and shrinks, title shows break running, break-end chime at completion |
+| AC-13 cross-context | sound-unavailable notice appears when a break auto-starts | component | notice shown at the auto-start moment, not only at the next press |
+| AC-14 cross-context | duration change before focus end applies; after auto-start waits | unit | break gets the new length if committed before the focus end; running break keeps its length if committed later; applies from the next fresh start or Reset break |
+| AC-15 happy path | pause requested while focus pausing is off does nothing | unit | focus keeps running; Reset focus returns it to full length, waiting, never counted |
+| AC-15 happy path | no pause control shown for running focus when pausing is off | component | Pause focus hidden; Reset focus present; main position empty |
+| AC-16 happy path | pause then resume focus when pausing is allowed | unit | freezes at the remaining time, resumes from exactly that time |
+| AC-17 domain invariant | allow-pausing changes never alter a phase in progress | unit | default off, persists; paused focus stays resumable after turning off; running focus gains or loses pause at once and keeps running |
+| AC-17 domain invariant | allow-pausing setting sits next to auto-start breaks and keyboard focus moves as in AC-11 | component | setting placed beside auto-start breaks; focus moves per AC-11 when Pause focus disappears |
+
+### Edge cases / error paths
+
+- Focus completion noticed at exactly 5 s → expected: on-time, break auto-starts; at 5.001 s → late, break waiting.
+- Start focus pressed twice within the skip guard → expected: both ignored, break keeps running.
+- Break paused inside the guard, then resumed → expected: Start focus becomes available only after 3 s of real time, not 3 s of running time.
+- Reset break, then an immediate repeat press on the same spot → expected: break stays waiting, not skipped (layout never puts Start focus there).
+- Tab frozen past the focus end, then reopened → expected: break waiting, exactly one focus-end chime, no break-end chime.
+- Corrupted or hand-edited saved setting value → expected: that setting reads as its default, page works.
+- Browser storage blocked → expected: both settings return to defaults on each load, changes still apply for the current load.
+- Another tab saves different setting values → expected: this page ignores them until its next load.
+- Duration saved in another tab between focus end and break start → expected: break length checked and corrected as for any fresh start.
+- Sound cannot be played when a break auto-starts → expected: sound-unavailable notice shown at that moment.
+
+### Test data
+
+- Seed strategy: an injectable clock and in-memory fake saved-settings values (valid, missing, invalid, refusing writes) — the only persistence is two on/off values and existing scalar counters, so no entity factories are needed.
+- Integration dependency: N/A — there is no datastore, server or queue (`docs/adr/0002-no-backend-for-v1.md`); browser storage is exercised at the component level in a real browser, not mocked as a datastore.
+- Cleanup boundary: per-test — each test builds a fresh engine with a fresh clock; manual browser checks clear site storage before each run.
+
+### NFR validation (load)
+
+<!-- N/A: no numeric NFR -->
+
+No throughput or latency-under-load target exists. The numeric §6 targets are timing rules, covered by the unit rows above: 5 s on-time tolerance (checked at 5 s and 5.001 s), ≤ 1 s auto-started break accuracy, 3 s ± 0.25 s skip guard, exactly one chime per completion (including late). Start focus response ≤ 250 ms and zero extra network requests are manual checks in a real browser.
+
+### CI placement
+
+- On every PR: unit.
+- Before merge / pre-release (manual until a UI harness exists): component and e2e-through-UI checks, including one return-after-sleep run.
