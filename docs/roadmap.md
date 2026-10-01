@@ -86,4 +86,4 @@ flowchart LR
 | Session tracking (task label + daily counter) | 2026-09-29 | [changelog](features/session-tracking/CHANGELOG.md) · [review](features/session-tracking/_review/review-2026-09-29.md) · `58fdc5b` |
 | Adjustable durations + cycle length | 2026-09-29 | [changelog](features/adjustable-durations/CHANGELOG.md) · [review](features/adjustable-durations/_review/review-2026-09-29.md) · `e7c77dd` |
 | Sensory feedback (ring, tab title, chime) | 2026-09-30 | [changelog](features/sensory-feedback/CHANGELOG.md) · [review](features/sensory-feedback/_review/review-2026-09-30.md) · [PR #1](https://github.com/skush/pomodoro/pull/1) · `61326ff` |
-| Break flow (auto-start breaks, Start focus, Allow pausing focus) | 2026-10-01 | [changelog](features/break-flow/CHANGELOG.md) · [review](features/break-flow/_review/review-2026-10-01.md) · PR pending |
+| Break flow (auto-start breaks, Start focus, Allow pausing focus) | 2026-10-01 | [changelog](features/break-flow/CHANGELOG.md) · [review](features/break-flow/_review/review-2026-10-01.md) · [PR #2](https://github.com/skush/pomodoro/pull/2) |
