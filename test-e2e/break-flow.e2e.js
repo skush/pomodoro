@@ -505,6 +505,23 @@ test('review round 2 (AC-12/AC-14): a focused field the User has not edited show
   });
 });
 
+test('review round 3 (AC-12/AC-14): a duration saved as 07 is shown as 7, so a later focused, unedited field still shows a corrected stored value', async () => {
+  await withApp({}, async (app) => {
+    await app.startFocus().click();
+    await app.shortBreakField().fill('07');
+    await app.shortBreakField().press('Enter'); // saved as 7
+    assert.equal(await app.shortBreakField().inputValue(), '7');
+    await app.advance(24 * MIN);
+    await app.shortBreakField().click(); // focused again, nothing typed
+    await app.page.evaluate(() => window.localStorage.setItem('adjustable-durations:short-break-duration', '10')); // another tab saved 10
+    await app.advance(MIN + 1000); // the Focus ends and the break auto-starts on the stored 10
+    assert.equal(await app.countdown(), '9:59');
+    assert.equal(await app.shortBreakField().inputValue(), '10');
+    await app.shortBreakField().press('Enter'); // leaving it must not write 7 back
+    assert.equal((await app.storage())['adjustable-durations:short-break-duration'], '10');
+  });
+});
+
 test('review #4 (spec §2 goal 4): a double-click on Start focus of a waiting break cannot start and then discard the Focus', async () => {
   await withApp({ storage: AUTO_START_OFF }, async (app) => {
     await runFocusToEnd(app);

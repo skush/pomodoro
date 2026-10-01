@@ -257,6 +257,7 @@ function createNumericField({ id, labelText, rangeMessage, validate, initialValu
     }
     message.hidden = true;
     lastValid = result.value;
+    input.value = String(result.value); // "07" becomes "7": an idle field always matches lastValid
     onCommit(result.value);
   }
   input.addEventListener('blur', commit);
