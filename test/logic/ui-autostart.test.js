@@ -225,12 +225,22 @@ describe('renderCycle (AC-01, AC-13, sad.md §8 One-shot consumption)', () => {
     assert.deepEqual(log, [['arm', display.remainingMs]]);
   });
 
-  test('a late completion: one Focus-end chime, one credit, nothing started, no wake-up armed (AC-03)', () => {
+  test('a late completion up to 2 minutes late: one Focus-end chime, one credit, nothing started, no wake-up armed (AC-03)', () => {
     const engine = runningFocus();
-    const { display, log } = cycle(engine, FOCUS + 60 * MIN);
+    const { display, log } = cycle(engine, FOCUS + 2 * MIN);
     assert.equal(display.running, false);
     assert.equal(display.remainingMs, SHORT);
     assert.deepEqual(log.filter(([k]) => k === 'play'), [['play', 'focusEnd']]);
+    assert.equal(log.filter(([k]) => k === 'credit').length, 1);
+    assert.equal(log.some(([k]) => k === 'arm' || k === 'prepare'), false);
+  });
+
+  test('a stale completion (more than 2 minutes late): no chime, one credit, nothing started, no wake-up armed (AC-03, AC-06b)', () => {
+    const engine = runningFocus();
+    const { display, log } = cycle(engine, FOCUS + 2 * MIN + 1);
+    assert.equal(display.running, false);
+    assert.equal(display.remainingMs, SHORT);
+    assert.equal(log.some(([k]) => k === 'play'), false);
     assert.equal(log.filter(([k]) => k === 'credit').length, 1);
     assert.equal(log.some(([k]) => k === 'arm' || k === 'prepare'), false);
   });

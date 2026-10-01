@@ -408,7 +408,7 @@ sequenceDiagram
 ```
 
 **Late completion after a sleep or a frozen tab (AC-03)** — no separate diagram. It is Flow 1's
-"late completion" branch: one Focus-end chime, the session credited as session-tracking decides,
+"late completion" branch: the Focus-end chime only if the page is back within 2 minutes of the Focus end (none, and no notice, if later), the session credited as session-tracking decides,
 and the break waiting at full length with Start break and Start focus, since `settle()` leaves it
 idle and nothing starts it. Flows 3 to 6 below cover the break controls, the Focus pause policy, the settings and the keyboard focus rule.
 
@@ -663,8 +663,8 @@ Each top-3 goal from §1 expanded into scenarios. Numbers are quoted from `spec.
   - **How verify:** "unit test with an injected clock; manual stopwatch check on desktop Chrome", on `engine.start(at)` with a backdated `at`.
 - **QG-1c Chimes per completion.**
   - **When:** any phase completes, on time or late, auto-started break or not.
-  - **Then:** chimes per completion: "exactly 1, including after a late completion". After a late Focus completion the break is waiting, no break-end chime plays (AC-03), and Focus never starts by itself (AC-02).
-  - **How verify:** "unit test on the timer engine: one completion → one chime; e2e return-after-sleep check" (`test-e2e/break-flow.e2e.js`, fake page clock).
+  - **Then:** chimes per completion: "exactly 1 when the completion is noticed within 2 minutes of its true moment; 0, and no notice, when noticed later". After a late Focus completion the break is waiting, no break-end chime plays (AC-03), and Focus never starts by itself (AC-02).
+  - **How verify:** "unit test: one completion → one chime, none past 2 minutes; e2e return-after-sleep check" (`test-e2e/break-flow.e2e.js`, fake page clock).
 
 **QG-2. Reflex-proof, phase-labelled controls**
 

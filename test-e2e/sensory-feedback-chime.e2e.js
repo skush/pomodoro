@@ -100,12 +100,23 @@ test('AC-10: a Focus completion plays one Focus-end chime and credits the Sessio
   });
 });
 
-test('AC-10: a Focus that completed before a midnight that has since passed still chimes once but is not credited to the new day', async () => {
+test('AC-10: a Focus that completed before a midnight that has since passed still chimes once (within 2 minutes) but is not credited to the new day', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    await app.page.clock.setSystemTime(new Date('2026-09-29T23:34:00'));
+    await app.startFocus().click();
+    await app.advance(26 * MIN); // true completion 23:59, the page next looks at 00:00 on the 30th
+    assert.equal((await app.tones()).length, FOCUS_NOTES);
+    assert.equal(await app.phase(), 'Short break');
+    assert.match(await app.sessionCount(), /: 0$/); // the new day starts at zero
+  });
+});
+
+test('AC-10/AC-06b: a Focus that completed before a midnight and is noticed more than 2 minutes later has no chime and is not credited to the new day', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
     await app.page.clock.setSystemTime(new Date('2026-09-29T23:30:00'));
     await app.startFocus().click();
     await app.advance(40 * MIN); // true completion 23:55, the page next looks at 00:10 on the 30th
-    assert.equal((await app.tones()).length, FOCUS_NOTES);
+    assert.deepEqual(await app.tones(), []);
     assert.equal(await app.phase(), 'Short break');
     assert.match(await app.sessionCount(), /: 0$/); // the new day starts at zero
   });
@@ -127,15 +138,28 @@ test('AC-07: a Pause or Reset an instant before zero means no completion and no 
   });
 });
 
-test('AC-06b: after a long jump past the deadline the chime plays exactly once and the next phase waits for Start', async () => {
+test('AC-06b: when the page runs again within 2 minutes of the deadline the chime plays exactly once and the next phase waits for Start', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
     await app.startFocus().click();
-    await app.advance(3 * 60 * MIN); // device slept for three hours
+    await app.advance(25 * MIN + 2 * MIN); // a short sleep: back 2 minutes after the Focus end
     assert.equal((await app.tones()).length, FOCUS_NOTES);
     assert.equal(await app.phase(), 'Short break');
     assert.equal(await app.title(), 'Ready · 5 min · Short break');
     await app.advance(60 * MIN);
     assert.equal((await app.tones()).length, FOCUS_NOTES);
+  });
+});
+
+test('AC-06b: when the page runs again more than 2 minutes after the deadline there is no chime and no notice, and the next phase waits for Start', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    await app.startFocus().click();
+    await app.advance(3 * 60 * MIN); // device slept for three hours
+    assert.deepEqual(await app.tones(), []); // the User who comes back needs no late sound
+    assert.equal(await app.notice().isVisible(), false); // and is not told sound is unavailable
+    assert.equal(await app.phase(), 'Short break');
+    assert.equal(await app.title(), 'Ready · 5 min · Short break');
+    await app.advance(60 * MIN);
+    assert.deepEqual(await app.tones(), []);
   });
 });
 

@@ -361,7 +361,7 @@ sequenceDiagram
 **Critical flow 3: After a device sleep, lock or frozen tab (AC-06b)** — no separate diagram. It is
 Flow 1's "deadline has passed" branch entered from whichever wake source runs first once the page
 runs again: the overdue worker timeout, the throttled render tick or `visibilitychange`. The
-one-shot `justCompleted` makes that single chime (or the notice) happen exactly once. The next
+one-shot `justCompleted` makes that single chime (or the notice) happen exactly once. A completion noticed more than 2 minutes after its true moment (`STALE_COMPLETION_MS`, owner decision 2026-10-01) is stale: the UI plays neither the chime nor the notice, and the completion is still credited. The next
 phase is idle, so nothing further completes unattended. `sequences` expands this and covers every
 §5 AC.
 
@@ -386,7 +386,9 @@ sequenceDiagram
     Engine-->>UI: next phase idle, justCompleted with phase and true moment
     UI->>UI: set tab title to the next phase, ready
     UI->>UI: ring full in the next phase colour
-    alt sound available (context running)
+    alt completion noticed more than 2 minutes after its true moment (stale)
+        UI->>UI: no chime, no notice (owner decision 2026-10-01)
+    else sound available (context running)
         UI->>Audio: play the tone for the completed phase, once
         Audio-->>User: Completion chime, late
     else sound blocked or suspended
@@ -533,7 +535,7 @@ deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation
 - **When:** the User presses Start/Pause/Resume/Reset or commits a duration; a phase completes; the
   User returns to the tab; the device slept past the deadline; sound is unavailable.
 - **Then:** no chime on any control or commit, and exactly one per Phase completion, never repeated
-  (AC-07). After a sleep, exactly one chime at the moment the page runs again, and none after
+  (AC-07). After a sleep, one chime at the moment the page runs again if that is within 2 minutes of the completion, none if later, and none after
   (AC-06b). Each tone "≤ 2 s, played once, never repeating"; "peak output gain of each tone ≤ 0.3 of
   full scale"; "0 network requests, 0 audio files shipped" (`spec.md` §6, verbatim). When sound
   cannot play, the notice appears and nothing is held back (AC-11).

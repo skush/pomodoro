@@ -154,7 +154,7 @@ what ended — Focus plays the Focus-end tone, Short break or Long break plays t
 once, soft and short, with the two distinguishable. Either way the next phase loads waiting for Start
 and nothing else plays. A Focus completion is credited to the Session counter exactly as
 session-tracking decides (normally plus one; a completion whose true moment fell before a midnight
-that has since passed still chimes but is not carried into the new day's count); a break completion
+that has since passed is not carried into the new day's count, and chimes only if noticed within 2 minutes, AC-06b); a break completion
 never changes the counter. The notice stays until a later Start or Resume finds sound working.
 
 ### Flow: US-05 — Get the chime while working elsewhere
@@ -168,9 +168,9 @@ flowchart TD
     E --> F["SCR-02 already shows the next phase marked ready"]
     F -->|"User returns to the timer tab"| K["SCR-01 next phase waiting for Start, no second chime"]
     D -->|"no: device slept or locked, phone, or tab frozen"| G["Nothing plays while the page cannot run"]
-    G -->|"Page runs again, tab visible or still in the background"| H{"Can sound be played now?"}
-    H -->|"yes"| I["Chime plays exactly once, SCR-02 shows the next phase marked ready, no further chimes"]
-    H -->|"no"| J["SCR-01 notice says the completion sound is unavailable, chime is not held back to play later"]
+    G -->|"Page runs again, tab visible or still in the background"| H{"More than 2 minutes after the true moment?"}
+    H -->|"no"| I["Chime plays exactly once (or the sound-unavailable notice appears if sound cannot play, never held back for later), SCR-02 shows the next phase marked ready"]
+    H -->|"yes: stale"| J["No chime and no notice, SCR-02 shows the next phase marked ready"]
     I -->|"User returns to the timer tab"| K
     J --> K
 ```
@@ -183,10 +183,12 @@ starts the tab title already shows the next phase marked ready. Back on the time
 is waiting for Start and no second chime plays on return. Alt branch, for a device that slept or
 locked past the moment, a phone with the browser in the background, or a frozen tab: nothing plays at
 the true moment. As soon as the page's code runs again — whether the tab is visible or still hidden —
-the chime for that phase plays exactly once, the tab title shows the next phase waiting for Start, and
-nothing further follows, because the next phase never starts on its own. If sound cannot be played at
-that moment, the sound-unavailable notice appears instead and the chime is not held back to play
-later. Either way the User lands on the timer page with the next phase waiting.
+the tab title shows the next phase waiting for Start and no further chime follows, because the next
+phase never starts on its own. If the page runs again within 2 minutes of the true moment, the chime
+for that phase plays exactly once; if sound cannot be played at that moment, the sound-unavailable
+notice appears instead and the chime is not held back to play later. If it runs again more than 2
+minutes after the true moment (a stale completion: the User has been away and does not need a late
+sound), neither the chime nor the notice appears. Either way the User lands on the timer page with the next phase waiting.
 
 ### Flow: US-06 — Use a readable dark interface on any screen
 
@@ -228,7 +230,7 @@ non-goal).
 | AC-04 | Flow US-03 → C→D, C→E, C→F | the three tab-title states; the 60 s trailing tolerance sits on node D |
 | AC-05 | Flow US-04 → Y→F (Focus-end tone), Y→G (break-end tone) | distinctness and loudness are §6 / unit-test matters |
 | AC-06 | Flow US-05 → D→E→F | chime started within 1 s, never early, title already on next phase |
-| AC-06b | Flow US-05 → D→G→H→I | sleep, lock, phone or frozen tab: chime once when the page runs again, no chimes after |
+| AC-06b | Flow US-05 → D→G→H→I or J | sleep, lock, phone or frozen tab: chime once when the page runs again if within 2 minutes of the true moment, none (and no notice) if later; no chimes after |
 | AC-07 | Flow US-04 → A→X and W→X; Flow US-05 → F→K and I→K | no chime on Start, Pause, Resume, Reset or duration commit; none again on return to the tab |
 | AC-08 | Flow US-01 → self-edges on B and C (commit while running or paused) | ring keeps the starting length; Reset → A gives the new full length |
 | AC-09 | Flow US-01 → self-edge on A; Flow US-03 → A→J | ring full and title in new whole minutes immediately |

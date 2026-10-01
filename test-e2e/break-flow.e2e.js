@@ -133,9 +133,9 @@ test('AC-07/AC-08: with Auto-start breaks off the break waits, with Start break 
   });
 });
 
-test('AC-03: a completion noticed long after (the device slept) leaves the break waiting, one Focus-end chime, no break-end chime', async () => {
+test('AC-03: a completion noticed within 2 minutes (a short sleep) leaves the break waiting, one Focus-end chime, no break-end chime', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
-    await runFocusToEnd(app, 3 * 60 * MIN);
+    await runFocusToEnd(app, 2 * MIN);
     assert.equal(await app.phase(), 'Short break');
     assert.equal(await app.countdown(), '5:00'); // never counted down or used up while away
     assert.equal(await app.title(), 'Ready · 5 min · Short break');
@@ -150,6 +150,22 @@ test('AC-03: a completion noticed long after (the device slept) leaves the break
   });
 });
 
+test('AC-03: a completion noticed more than 2 minutes late (the device slept) leaves the break waiting, no chime and no notice, the session still credited', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    await runFocusToEnd(app, 3 * 60 * MIN);
+    assert.equal(await app.phase(), 'Short break');
+    assert.equal(await app.countdown(), '5:00'); // never counted down or used up while away
+    assert.equal(await app.title(), 'Ready · 5 min · Short break');
+    assert.deepEqual(await visibleControls(app), ['Start focus', 'Start break']);
+    assert.deepEqual(await app.tones(), []); // the User who comes back needs no late sound
+    assert.equal(await app.notice().isVisible(), false);
+    await app.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); // back to the tab
+    await app.advance(60 * MIN);
+    assert.deepEqual(await app.tones(), []);
+    assert.match(await app.sessionCount(), /: 1$/);
+  });
+});
+
 test('AC-03: a Long break after a late completion also waits at its full length', async () => {
   await withApp({ audioSpy: {}, storage: { 'adjustable-durations:cycle-length': '2' } }, async (app) => {
     await runFocusToEnd(app); // Focus 1, on time: the short break auto-starts
@@ -160,8 +176,7 @@ test('AC-03: a Long break after a late completion also waits at its full length'
     assert.equal(await app.countdown(), '15:00');
     assert.deepEqual(await visibleControls(app), ['Start focus', 'Start break']);
     const tones = await app.tones();
-    assert.equal(tones.length, FOCUS_NOTES * 2);
-    assert.ok(tones.slice(FOCUS_NOTES).every((t, i, all) => i === 0 || t.frequency > all[i - 1].frequency));
+    assert.equal(tones.length, FOCUS_NOTES); // only the on-time Focus 1 chime; the slept-through end is silent
   });
 });
 

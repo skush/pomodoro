@@ -21,6 +21,7 @@ import {
   validateStoredToggle,
   DEFAULT_BREAK_FLOW_SETTINGS,
   isOnTimeCompletion,
+  isStaleCompletion,
   validateDurationInput,
   validateCycleLengthInput,
   ringFraction,
@@ -318,10 +319,13 @@ const SOUND_NOTICE_TEXT =
 // snapshot carrying `justCompleted` plays that phase's tone exactly once (the engine
 // hands the record over once, ADR-0002); if the tone cannot play the notice shows and
 // nothing is held back for later (AC-11). Nothing here runs for a Start, Pause, Resume,
-// Reset or commit, because those never produce a `justCompleted` (AC-07).
-export function applyCompletionCue(snapshot, { player, setNotice }) {
+// Reset or commit, because those never produce a `justCompleted` (AC-07). A stale
+// completion (noticed more than 2 minutes after its true moment, `now` being when) plays
+// no chime and shows no notice: the User who comes back needs no late sound (AC-06b).
+export function applyCompletionCue(snapshot, { player, setNotice }, now) {
   const completed = snapshot.justCompleted;
   if (!completed) return;
+  if (isStaleCompletion(completed.at, now)) return;
   let played = false;
   try {
     played = player.play(toneFor(completed.phase)) === true;
@@ -410,7 +414,7 @@ export function renderCycle({ engine, now, autoStartBreaks, prepare, visual, cue
   const display = autoStartBreak({ snapshot, now, enabled: autoStartBreaks, engine, prepare });
   if (display !== snapshot) syncWakeup(display, wakeup);
   applyVisualCues(display, visual);
-  applyCompletionCue(snapshot, cue);
+  applyCompletionCue(snapshot, cue, now);
   credit(now, snapshot.justCompletedFocusAt);
   return { snapshot, display };
 }

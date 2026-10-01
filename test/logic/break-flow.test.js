@@ -7,6 +7,8 @@ import {
   SKIP_GUARD_MS,
   DEFAULT_BREAK_FLOW_SETTINGS,
   isOnTimeCompletion,
+  isStaleCompletion,
+  STALE_COMPLETION_MS,
   isSkipGuardActive,
   validateStoredToggle,
   controlLayout,
@@ -17,6 +19,17 @@ import {
 test('the tolerance and guard constants match the spec NFRs', () => {
   assert.equal(ON_TIME_TOLERANCE_MS, 5000);
   assert.equal(SKIP_GUARD_MS, 3000);
+});
+
+test('isStaleCompletion: false up to 120 s late, true after; a nonsensical clock is never stale (sensory-feedback AC-06b)', () => {
+  const at = 1_000_000;
+  assert.equal(STALE_COMPLETION_MS, 120_000);
+  assert.equal(isStaleCompletion(at, at), false);
+  assert.equal(isStaleCompletion(at, at + 120_000), false);
+  assert.equal(isStaleCompletion(at, at + 120_001), true);
+  assert.equal(isStaleCompletion(at, at - 5000), false); // clock went backwards: keep the old behaviour, chime
+  assert.equal(isStaleCompletion(undefined, at), false);
+  assert.equal(isStaleCompletion(at, undefined), false);
 });
 
 test('isOnTimeCompletion: true at 5000 ms, false at 5001 ms (AC-01)', () => {

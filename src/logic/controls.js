@@ -5,6 +5,12 @@
 // spec.md §6: a Focus completion noticed <= 5 s after its true end is On-time and
 // auto-starts the break; later is late and leaves the break waiting.
 export const ON_TIME_TOLERANCE_MS = 5000;
+// sensory-feedback AC-06b (owner decision 2026-10-01): a completion noticed more than 2
+// minutes after its true moment is stale — the User has been away (device sleep, frozen
+// tab), so it plays no chime and shows no sound-unavailable notice. The page cannot tell a
+// sleep from a freeze, only how late it is; a hidden tab throttled by up to about a minute
+// still chimes.
+export const STALE_COMPLETION_MS = 120000;
 // spec.md §6: Start focus does nothing for 3 s of real time from the break's start.
 export const SKIP_GUARD_MS = 3000;
 
@@ -16,6 +22,13 @@ export function isOnTimeCompletion(at, now) {
   if (!Number.isFinite(at) || !Number.isFinite(now)) return false;
   const lateness = now - at;
   return lateness >= 0 && lateness <= ON_TIME_TOLERANCE_MS;
+}
+
+// AC-06b: `at` is the phase's true end, `now` when it was noticed. A clock that is missing
+// or went backwards is never stale, so such a completion keeps its chime.
+export function isStaleCompletion(at, now) {
+  if (!Number.isFinite(at) || !Number.isFinite(now)) return false;
+  return now - at > STALE_COMPLETION_MS;
 }
 
 // AC-05: the guard exists only for a started break (non-null startedAt), is measured in

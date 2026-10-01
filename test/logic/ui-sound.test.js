@@ -30,6 +30,32 @@ describe('applyCompletionCue (AC-05, AC-07, AC-11)', () => {
     assert.deepEqual(b.tones, [TONES.breakEnd, TONES.breakEnd]);
   });
 
+  test('AC-06b: a stale completion (more than 2 minutes late) plays no chime and shows no notice', () => {
+    const { tones, player } = played();
+    const notices = [];
+    const cue = { player, setNotice: (v) => notices.push(v) };
+    const at = 5_000_000;
+    applyCompletionCue(snapshotWith({ phase: PHASES.FOCUS, at }), cue, at + 120_001);
+    applyCompletionCue(snapshotWith({ phase: PHASES.SHORT_BREAK, at }), cue, at + 3 * 60 * 60 * 1000);
+    assert.deepEqual(tones, []);
+    assert.deepEqual(notices, []);
+    // not stale: still chimes, up to and including 120 s late
+    applyCompletionCue(snapshotWith({ phase: PHASES.FOCUS, at }), cue, at + 120_000);
+    assert.deepEqual(tones, [TONES.focusEnd]);
+  });
+
+  test('AC-06b: a stale completion shows no notice even when sound could not play', () => {
+    const notices = [];
+    let attempts = 0;
+    const at = 5_000_000;
+    applyCompletionCue(snapshotWith({ phase: PHASES.FOCUS, at }), {
+      player: { play: () => (attempts += 1, false) },
+      setNotice: (v) => notices.push(v),
+    }, at + 10 * 60 * 1000);
+    assert.equal(attempts, 0);
+    assert.deepEqual(notices, []);
+  });
+
   test('AC-11: when the tone cannot play, the notice shows and nothing is held back', () => {
     const notices = [];
     let attempts = 0;

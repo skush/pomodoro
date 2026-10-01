@@ -110,7 +110,7 @@ Traceability — this spec **supersedes** the following shipped criteria for the
 
 **Given** Auto-start breaks is on and a Focus phase is running when the device sleeps, the screen locks, or the browser freezes or backgrounds the tab so that the Focus end is only noticed later — a late completion
 **When** the User returns to the page, however much time has passed
-**Then** the Focus-end chime plays exactly once, the completion is credited as session-tracking decides, and the correct next break — including a Long break — is shown at its full length, waiting, with Start break and Start focus offered; the break is never counted down or used up while the User was away, and no break-end chime plays
+**Then** the completion is credited as session-tracking decides, and the correct next break — including a Long break — is shown at its full length, waiting, with Start break and Start focus offered; the break is never counted down or used up while the User was away, and no break-end chime plays. The Focus-end chime plays exactly once if the page runs again within 2 minutes of the Focus end, and not at all (no sound-unavailable notice either) if it is later — a User who comes back after a sleep needs no late sound (sensory-feedback AC-06b)
 
 ### AC-04 (US-02) — happy path
 
@@ -222,7 +222,7 @@ These lists are complete: a waiting phase shows no pause or reset control. A con
 | Auto-started break accuracy | remaining break time differs from (full length − real time since the Focus end) by ≤ 1 s | unit test with an injected clock; manual stopwatch check on desktop Chrome |
 | Skip guard length | 3 s (± 0.25 s) of real time from the break's start — the Focus phase's true end for an auto-started break, the Start break press otherwise | unit test on the guard rule with an injected clock |
 | Start focus response | Focus shown running ≤ 250 ms after the press | manual check during a running break |
-| Chimes per completion | exactly 1, including after a late completion | unit test on the timer engine: one completion → one chime; e2e return-after-sleep check |
+| Chimes per completion | exactly 1 when the completion is noticed within 2 minutes of its true moment; 0, and no notice, when noticed later | unit test: one completion → one chime, none past 2 minutes; e2e return-after-sleep check |
 | Self-contained load | zero network requests beyond the initial page load | browser devtools Network tab |
 
 ## 6.1 Security / privacy
@@ -264,7 +264,7 @@ Every §5 criterion maps to ≥1 test. Unit tests run against the pure logic wit
 | AC-01 happy path | on-time focus completion auto-starts the correct break from its full length | unit | one chime, completion credited once, break running; remaining time within 1 s of (full length − time since the focus end); length re-read from current Configured duration |
 | AC-01 happy path | auto-started break shows running ring and tab title | e2e-through-UI | focus ends in an open tab → break phase name, full-then-shrinking ring and running title appear with no press |
 | AC-02 domain invariant | finished break leaves the next focus waiting, with auto-start on or off | unit | break-end chime once; focus at full length, stopped; never started by itself |
-| AC-03 cross-context | late focus completion leaves the break waiting at full length, including a long break | unit | completion noticed after 5.001 s → one focus-end chime, break waiting, no countdown, no break-end chime |
+| AC-03 cross-context | late focus completion leaves the break waiting at full length, including a long break | unit | completion noticed after 5.001 s → break waiting, no countdown, no break-end chime; one focus-end chime up to 120 s late, none (and no notice) at 120.001 s |
 | AC-03 cross-context | returning after sleep shows a waiting break | e2e-through-UI | after the device sleeps past the focus end, the page shows the break waiting with Start break and Start focus offered |
 | AC-04 happy path | start focus ends a short, long, running, paused or waiting break at once | unit | break ends silently; focus running from the current Configured focus duration |
 | AC-04 happy path | start focus during a break switches the screen to focus | e2e-through-UI | focus shown running within 250 ms of the press |
@@ -297,7 +297,7 @@ Every §5 criterion maps to ≥1 test. Unit tests run against the pure logic wit
 - Start focus pressed twice within the skip guard → expected: both ignored, break keeps running.
 - Break paused inside the guard, then resumed → expected: Start focus becomes available only after 3 s of real time, not 3 s of running time.
 - Reset break, then an immediate repeat press on the same spot → expected: break stays waiting, not skipped (layout never puts Start focus there).
-- Tab frozen past the focus end, then reopened → expected: break waiting, exactly one focus-end chime, no break-end chime.
+- Tab frozen past the focus end, then reopened → expected: break waiting, no break-end chime, and no chime or sound-unavailable notice at all when it is more than 2 minutes late.
 - Corrupted or hand-edited saved setting value → expected: that setting reads as its default, page works.
 - Browser storage blocked → expected: both settings return to defaults on each load, changes still apply for the current load.
 - Another tab saves different setting values → expected: this page ignores them until its next load.

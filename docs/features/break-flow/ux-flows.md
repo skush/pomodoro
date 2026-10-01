@@ -104,13 +104,13 @@ The setting appears next to the durations, on the first time. A missing or inval
 ```mermaid
 flowchart TD
     A[SCR-02 Focus running] -->|device sleeps or tab frozen past Focus end| B[Away: nothing visible]
-    B -->|User returns to the page| C[Focus-end chime plays once]
+    B -->|User returns to the page| C[Chime only if within 2 minutes of Focus end]
     C --> D[SCR-04 Break waiting at full length - Short or Long per cycle]
     D -->|Start break| E[SCR-05 Break running]
     D -->|Start focus| F[SCR-02 Focus running]
 ```
 
-If the Focus end is only noticed late (more than 5 seconds after its true end), nothing counts down while the user is away. On return, the Focus-end chime plays once, the session is credited, and the correct break — Long included — is shown at full length, waiting, with both Start break and Start focus offered. No break-end chime plays.
+If the Focus end is only noticed late (more than 5 seconds after its true end), nothing counts down while the user is away. On return the session is credited, the Focus-end chime plays once only if the return is within 2 minutes of the Focus end (a User who comes back later needs no late sound, and no sound-unavailable notice appears either), and the correct break — Long included — is shown at full length, waiting, with both Start break and Start focus offered. No break-end chime plays.
 
 ### Flow: US-06 — Know what each control does (labels and keyboard focus)
 
