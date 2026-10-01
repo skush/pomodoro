@@ -1,8 +1,9 @@
 // DOM layer: renders the phase label + countdown, wires Start/Pause/Reset, the task
 // label, the session count, and the adjustable-durations settings fields (three
-// durations + cycle length). Owns all localStorage access, through two write
-// gatekeepers: persistState (session-tracking) and persistDurationConfig
-// (adjustable-durations). The only caller of the logic engine's methods (AC-03) — no
+// durations + cycle length) and the two break-flow toggles. Owns all localStorage
+// access, through three write gatekeepers: persistState (session-tracking),
+// persistDurationConfig (adjustable-durations) and persistBreakFlowSettings
+// (break-flow). The only caller of the logic engine's methods (AC-03) — no
 // other input source (no window 'message' or 'storage' listener, nothing else) is
 // ever wired to it.
 
@@ -17,6 +18,8 @@ import {
   applyCountUpdate,
   validateStoredDuration,
   validateStoredCycleLength,
+  validateStoredToggle,
+  DEFAULT_BREAK_FLOW_SETTINGS,
   validateDurationInput,
   validateCycleLengthInput,
   ringFraction,
@@ -40,6 +43,9 @@ const FOCUS_DURATION_KEY = 'adjustable-durations:focus-duration';
 const SHORT_BREAK_DURATION_KEY = 'adjustable-durations:short-break-duration';
 const LONG_BREAK_DURATION_KEY = 'adjustable-durations:long-break-duration';
 const CYCLE_LENGTH_KEY = 'adjustable-durations:cycle-length';
+
+const AUTO_START_BREAKS_KEY = 'break-flow:auto-start-breaks';
+const ALLOW_PAUSING_FOCUS_KEY = 'break-flow:allow-pausing-focus';
 
 // session-tracking T4 (ADR-0002, AC-07): the ONLY function anywhere that may call
 // `storage.setItem` for the count/date/label keys — the write guard's single
@@ -141,6 +147,35 @@ export function readPersistedDurationConfig(storage) {
   return config;
 }
 
+// break-flow T5 (sad.md §8 Persistence, spec.md AC-09): the THIRD storage gatekeeper —
+// the only function that may call `storage.setItem` for the two break-flow keys. Always
+// writes BOTH, as 'true'/'false', so a foreign edit to either key is overwritten, never
+// adopted, by the next legitimate write. A throwing (or absent) storage is swallowed: the
+// toggle still applies in memory for the rest of the page load. Returns whether it saved.
+export function persistBreakFlowSettings(storage, settings) {
+  try {
+    storage.setItem(AUTO_START_BREAKS_KEY, String(Boolean(settings.autoStartBreaks)));
+    storage.setItem(ALLOW_PAUSING_FOCUS_KEY, String(Boolean(settings.allowPausingFocus)));
+    return true;
+  } catch {
+    // fail-soft: never throw to the User, never surface an error
+    return false;
+  }
+}
+
+// break-flow T5 (spec.md AC-07/AC-09): each key validated on its own (validateStoredToggle),
+// so a bad value never affects the other. Unlike the durations reader this does NO
+// write-back — the next toggle writes the full pair. Never throws, null storage included.
+export function readPersistedBreakFlowSettings(storage) {
+  return {
+    autoStartBreaks: validateStoredToggle(safeGetItem(storage, AUTO_START_BREAKS_KEY), DEFAULT_BREAK_FLOW_SETTINGS.autoStartBreaks),
+    allowPausingFocus: validateStoredToggle(
+      safeGetItem(storage, ALLOW_PAUSING_FOCUS_KEY),
+      DEFAULT_BREAK_FLOW_SETTINGS.allowPausingFocus,
+    ),
+  };
+}
+
 // adjustable-durations T5/T7 (spec.md AC-06/AC-09/AC-12, sad.md §6 Flow 3): the ONE
 // path both mount() and the pre-start correction use — read + validate each stored
 // value (writing any correction straight back), then push the values now in effect
@@ -235,6 +270,25 @@ function createNumericField({ id, labelText, rangeMessage, validate, initialValu
 
   wrapper.append(fieldLabel, input, message);
   return { element: wrapper, setValue };
+}
+
+// break-flow T5 (sad.md §8 Settings UI): a labelled checkbox that applies immediately.
+function createToggle({ id, labelText, checked, onChange }) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'toggle-field';
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.id = id;
+  input.checked = checked;
+  input.addEventListener('change', () => onChange(input.checked));
+
+  const fieldLabel = document.createElement('label');
+  fieldLabel.htmlFor = id;
+  fieldLabel.textContent = labelText;
+
+  wrapper.append(input, fieldLabel);
+  return { element: wrapper };
 }
 
 const PHASE_LABELS = {
@@ -386,6 +440,11 @@ export function mount(root, engine) {
   let config = syncConfigFromStorage(storage, engine);
   // review fix #1: false once a commit's write failed — storage then lags memory.
   let lastWriteOk = true;
+  // break-flow T5 (sad.md §4 decision 7): read once, at load only (AC-12). Auto-start
+  // breaks lives in memory because only the auto-start branch reads it; Allow pausing
+  // focus is pushed into the engine, the only place it lives.
+  let breakFlow = readPersistedBreakFlowSettings(storage);
+  engine.setAllowPausingFocus(breakFlow.allowPausingFocus);
   const persisted = readPersistedState(storage);
   labelField.value = persisted.label;
   let lastAcceptedLabel = persisted.label;
@@ -504,6 +563,34 @@ export function mount(root, engine) {
   cycleGroup.className = 'settings-group';
   cycleGroup.append(cycleLengthField.element);
   card.append(cycleGroup);
+
+  // break-flow T5 (spec.md AC-07/AC-09/AC-17): a toggle applies at once and never alters
+  // a phase already in progress — the engine only changes what pause() may do from now on.
+  // Both values go to storage as the full pair; a refused write is swallowed and the new
+  // value still applies for this page load.
+  function commitBreakFlowSettings(next) {
+    breakFlow = { ...breakFlow, ...next };
+    engine.setAllowPausingFocus(breakFlow.allowPausingFocus);
+    persistBreakFlowSettings(storage, breakFlow);
+    render();
+  }
+
+  const autoStartToggle = createToggle({
+    id: 'auto-start-breaks',
+    labelText: 'Auto-start breaks',
+    checked: breakFlow.autoStartBreaks,
+    onChange: (checked) => commitBreakFlowSettings({ autoStartBreaks: checked }),
+  });
+  const allowPausingToggle = createToggle({
+    id: 'allow-pausing-focus',
+    labelText: 'Allow pausing focus',
+    checked: breakFlow.allowPausingFocus,
+    onChange: (checked) => commitBreakFlowSettings({ allowPausingFocus: checked }),
+  });
+  const breakFlowGroup = document.createElement('div');
+  breakFlowGroup.className = 'settings-group toggle-group';
+  breakFlowGroup.append(autoStartToggle.element, allowPausingToggle.element);
+  card.append(breakFlowGroup);
 
   // The snapshot render() last showed — what the User saw when they pressed Start.
   let lastSnapshot = null;

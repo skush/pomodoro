@@ -101,7 +101,7 @@ describe('write-guard structural check (session-tracking T4, AC-07)', () => {
   // too (not only the literal `.setItem(` substring), and bounds persistState's
   // own body strictly (up to its closing brace, not "until the next export" —
   // a non-exported helper placed right after it must not be silently included).
-  test('every storage-write call anywhere in src/ lives inside persistState or persistDurationConfig, and persistState is called only by its legitimate triggers', () => {
+  test('every storage-write call anywhere in src/ lives inside persistState, persistDurationConfig or persistBreakFlowSettings, and persistState is called only by its legitimate triggers', () => {
     const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src');
     const writeCallPattern = /\.(setItem|removeItem|clear)\(|localStorage\s*[.[]/g;
 
@@ -130,7 +130,8 @@ describe('write-guard structural check (session-tracking T4, AC-07)', () => {
       return (text.match(writeCallPattern) || []).length;
     }
 
-    const gatekeepers = ['persistState', 'persistDurationConfig'];
+    // break-flow T5 (sad.md §8 Persistence): the THIRD gatekeeper joins the allowed writers.
+    const gatekeepers = ['persistState', 'persistDurationConfig', 'persistBreakFlowSettings'];
     const ranges = gatekeepers.map((name) => functionRange(uiContents, name));
     gatekeepers.forEach((name, i) => {
       assert.equal(
@@ -154,7 +155,7 @@ describe('write-guard structural check (session-tracking T4, AC-07)', () => {
       outsideGatekeepers,
     ];
     for (const text of otherFiles) {
-      assert.equal(writeCallCount(text), 0, 'a storage-write call exists outside the two gatekeepers — the only legitimate write paths AC-07/AC-08 allow');
+      assert.equal(writeCallCount(text), 0, 'a storage-write call exists outside the three gatekeepers — the only legitimate write paths AC-07/AC-08 and break-flow AC-09 allow');
     }
 
     const persistStateCallSites = (uiContents.match(/\bpersistState\(/g) || []).length;
@@ -585,5 +586,67 @@ describe('duration write-guard reader call sites (adjustable-durations review fi
         false,
       );
     }
+  });
+});
+
+// break-flow T5 (sad.md §8 Persistence, AC-09/AC-12): persistBreakFlowSettings is the only
+// writer of the two break-flow keys, and the settings are read only at mount.
+describe('break-flow write-guard (T5)', () => {
+  const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src');
+  const stripComments = (text) => text.replace(/\/\/.*$/gm, '');
+  const uiContents = stripComments(readFileSync(path.join(srcDir, 'ui/index.js'), 'utf8'));
+
+  function bodyOf(name) {
+    const from = uiContents.indexOf('export function ' + name);
+    assert.notEqual(from, -1, name + ' not found');
+    const open = uiContents.indexOf('{', from);
+    let depth = 0;
+    for (let i = open; i < uiContents.length; i += 1) {
+      if (uiContents[i] === '{') depth += 1;
+      if (uiContents[i] === '}') {
+        depth -= 1;
+        if (depth === 0) return uiContents.slice(from, i + 1);
+      }
+    }
+    throw new Error('unterminated ' + name);
+  }
+
+  test('both break-flow keys are written inside persistBreakFlowSettings and nowhere else', () => {
+    const body = bodyOf('persistBreakFlowSettings');
+    assert.equal((body.match(/\.setItem\(/g) || []).length, 2);
+    for (const key of ['AUTO_START_BREAKS_KEY', 'ALLOW_PAUSING_FOCUS_KEY']) {
+      assert.equal(body.includes(key), true, key + ' is not written by persistBreakFlowSettings');
+      const writes = uiContents.match(new RegExp('setItem\\(\\s*' + key + '\\b', 'g')) || [];
+      assert.equal(writes.length, 1, key + ' must be the argument of exactly one setItem call');
+    }
+  });
+
+  test('the other gatekeepers never write the break-flow keys', () => {
+    for (const name of ['persistState', 'persistDurationConfig']) {
+      const body = bodyOf(name);
+      assert.equal(/AUTO_START_BREAKS_KEY|ALLOW_PAUSING_FOCUS_KEY|break-flow:/.test(body), false, name);
+    }
+  });
+
+  test('readPersistedBreakFlowSettings is called only once, by mount (load) — no other read point (AC-12)', () => {
+    const calls = (uiContents.match(/\breadPersistedBreakFlowSettings\(/g) || []).length - 1; // minus the declaration
+    assert.equal(calls, 1);
+    const mountAt = uiContents.indexOf('export function mount');
+    assert.equal(uiContents.indexOf('readPersistedBreakFlowSettings(', mountAt) > mountAt, true);
+  });
+
+  test('persistBreakFlowSettings is called only from the toggle change handler', () => {
+    const calls = (uiContents.match(/\bpersistBreakFlowSettings\(/g) || []).length - 1; // minus the declaration
+    assert.equal(calls, 1);
+    const handler = uiContents.match(/function commitBreakFlowSettings\b[\s\S]*?\n {2}\}/);
+    assert.notEqual(handler, null, 'commitBreakFlowSettings not found');
+    assert.equal(handler[0].includes('persistBreakFlowSettings('), true);
+  });
+
+  test('the engine learns Allow pausing focus at mount and on every toggle — and nowhere else', () => {
+    const calls = (uiContents.match(/\bengine\.setAllowPausingFocus\(/g) || []).length;
+    assert.equal(calls, 2, 'once at mount, once in the toggle handler');
+    const handler = uiContents.match(/function commitBreakFlowSettings\b[\s\S]*?\n {2}\}/);
+    assert.equal(handler[0].includes('engine.setAllowPausingFocus('), true);
   });
 });

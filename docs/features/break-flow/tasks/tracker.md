@@ -9,7 +9,7 @@
 | T2 | Extend the engine: startedAt, startFocus(now), setAllowPausingFocus(on) and the focus-pause policy | domain | sergii.kushnir@gmail.com | M | T1 | done |
 | T3 | Add the pure controlLayout(snapshot, now) rule and phase-named CONTROL_LABELS | domain | sergii.kushnir@gmail.com | M | T1 | done |
 | T4 | Build createControls(onAction): three fixed slot buttons and the keyboard-focus rule | ui | sergii.kushnir@gmail.com | M | T3 | done |
-| T5 | Add the Auto-start breaks and Allow pausing focus toggles with a third storage gatekeeper | ui | sergii.kushnir@gmail.com | M | T1, T2 | todo |
+| T5 | Add the Auto-start breaks and Allow pausing focus toggles with a third storage gatekeeper | ui | sergii.kushnir@gmail.com | M | T1, T2 | done |
 | T6 | Replace Start/Pause/Reset with the phase-labelled slots and route every action to the engine | ui | sergii.kushnir@gmail.com | M | T2, T3, T4, T5 | todo |
 | T7 | Auto-start the break after an On-time Focus completion (backdated start in render) | app | sergii.kushnir@gmail.com | M | T2, T5, T6 | todo |
 | T8 | Move the existing e2e helpers and scripts to the phase-labelled controls | tests | sergii.kushnir@gmail.com | S | T6 | todo |
