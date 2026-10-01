@@ -21,11 +21,12 @@ The committed approach: a User setting, **Auto-start breaks** (on by default), m
 
 Traceability — this spec **supersedes** the following shipped criteria for the cases it covers (each stays in force for every case not named here):
 
-- core-timer **US-02, AC-02, AC-02b, AC-02c** (pause and resume) — they keep applying to every break, and to a Focus phase only while Allow pausing focus is on; with it off, a running Focus offers no pause control at all and a pause request does nothing (AC-15).
+- core-timer **US-02, AC-02, AC-02b, AC-02c** (pause and resume) — they keep applying to every break, and to a Focus phase only while Allow pausing focus is on; with it off, a running Focus offers no pause control at all and a pause request does nothing (AC-15). core-timer AC-02's disabled Pause control while nothing is running is replaced: a waiting phase shows no pause control at all (AC-10).
+- core-timer **AC-06** (Reset) for a phase already at its full duration — a waiting phase shows no reset control (AC-10); Reset focus and Reset break are offered only while their phase is running or paused.
 - core-timer **AC-03** — the legitimate inputs are now this page's phase-labelled controls (AC-10), its two settings (Auto-start breaks, Allow pausing focus), and the duration and cycle-length commits adjustable-durations §1 already added; the guard itself is unchanged (AC-12).
 - core-timer **AC-05** — for an awake device with the tab in the background, an On-time Focus completion now starts the break unattended, so the User may return to a break running or already finished. The replacement invariant: at most one phase per completion starts without the User, and a Focus phase never does (AC-02). After a sleep or a frozen tab the rule is unchanged in effect: a late completion leaves the break waiting (AC-03).
 - core-timer **AC-07** — "waits for the User to press Start" no longer holds for a break after an On-time Focus completion with Auto-start breaks on (AC-01); it still holds for every Focus phase, and for every break when the setting is off or the completion was late.
-- core-timer's control-enablement rule (Start disabled while running) — Start focus is available during a running or paused break (AC-04), except inside the Skip guard (AC-05).
+- core-timer's control-enablement rule (Start disabled while running) — Start focus is available during a running or paused break (AC-04), except inside the Skip guard (AC-05), which now follows every break start — automatic or by Start break.
 - sensory-feedback **AC-02**, **AC-06** and **§3** ("a newly loaded waiting phase", "the next phase waiting for Start", "the next phase never starts on its own") — after an On-time Focus completion with Auto-start breaks on, the ring and tab title show the break running, not waiting (AC-13). sensory-feedback **AC-06b** (after a sleep) is not superseded — AC-03 keeps it.
 - sensory-feedback **AC-11** — the sound-unavailable notice must also appear when a break auto-starts, which is not a Start or Resume press (AC-13).
 
@@ -95,9 +96,9 @@ Traceability — this spec **supersedes** the following shipped criteria for the
 
 ### AC-01 (US-01) — happy path
 
-**Given** Auto-start breaks is on and a Focus phase is running on an awake device with the page open (visible or in a background tab on desktop)
+**Given** Auto-start breaks is on and a Focus phase is running on an awake device with the page open (visible in any supported browser, or in a background tab of desktop Chrome or Edge — the browsers sensory-feedback §3 holds its background timing promise for)
 **When** that Focus phase reaches zero — an On-time completion
-**Then** the Focus-end chime plays once, the completion is credited exactly as before (in-cycle focus count, Session counter), and the correct next break — Short or Long per the cycle — begins counting down by itself from its full length, measured from the Focus phase's true end; its length comes from the current Configured duration, checked and corrected exactly as for any fresh start (adjustable-durations AC-06); the phase name, ring and tab title show that break running
+**Then** the Focus-end chime plays once, the completion is credited exactly as before (in-cycle focus count, Session counter), and the correct next break — Short or Long per the cycle — begins counting down by itself from its full length, measured from the Focus phase's true end; its length comes from the current Configured duration, checked and corrected exactly as for any fresh start (adjustable-durations AC-06); the phase name, ring and tab title show that break running. In a background tab of any other browser (e.g. Firefox) no auto-start is promised: the 5 s On-time tolerance (§6) decides, and a completion noticed later is a late completion (AC-03)
 
 ### AC-02 (US-01, US-04) — domain invariant
 
@@ -125,9 +126,9 @@ Traceability — this spec **supersedes** the following shipped criteria for the
 
 ### AC-05 (US-02) — error
 
-**Given** a break has auto-started after an On-time completion (AC-01)
-**When** the User presses Start focus within 3 seconds of the Focus phase's true end — the Skip guard
-**Then** the press does nothing and the break keeps going; for that time Start focus is shown greyed out in the main position, so the User can see it isn't available yet, and it becomes available on its own when the 3 seconds have passed in real time; pausing the break doesn't extend the guard, and Reset break leaves the break waiting, where no guard applies; a break the User started themselves, or a break waiting at full length, has no Skip guard
+**Given** a break has just started — auto-started after an On-time completion (AC-01), or started by the User with Start break
+**When** the User presses Start focus within 3 seconds of that break's start — the Focus phase's true end for an auto-started break, the Start break press for a User-started one — the Skip guard
+**Then** the press does nothing and the break keeps going; for that time Start focus is shown greyed out in the main position, so the User can see it isn't available yet, and it becomes available on its own when the 3 seconds have passed in real time; pausing the break doesn't extend the guard — a break paused inside it keeps Start focus greyed out until the 3 seconds have passed — and Resume break starts no new guard; Reset break leaves the break waiting, where no guard applies; a break waiting at full length has no Skip guard
 
 ### AC-06 (US-03) — happy path
 
@@ -161,24 +162,25 @@ Traceability — this spec **supersedes** the following shipped criteria for the
 - Focus waiting: **Start focus**.
 - Focus running: **Pause focus** when Allow pausing focus is on; empty when it is off. Reset focus is beside it in both cases, never in the main position.
 - Focus paused (only reachable with Allow pausing focus on): **Resume focus**, with Reset focus beside it.
-- Break, within the Skip guard: **Start focus**, greyed out, with Pause break and Reset break beside it.
+- Break running, within the Skip guard: **Start focus**, greyed out, with Pause break and Reset break beside it.
+- Break paused, within the Skip guard: **Start focus**, greyed out, with Resume break and Reset break beside it.
 - Break running: **Start focus**, with Pause break and Reset break beside it.
 - Break paused: **Start focus**, with Resume break and Reset break beside it.
 - Break waiting: **Start break**, with Start focus beside it.
 
-A control the User's settings never allow (Pause focus with Allow pausing focus off) is hidden, not greyed out; a control that is only unavailable for the moment (Start focus within the Skip guard) is greyed out
+These lists are complete: a waiting phase shows no pause or reset control. A control the User's settings never allow (Pause focus with Allow pausing focus off) is hidden, not greyed out; the only control ever greyed out is Start focus within the Skip guard. When Reset break returns a break to waiting, Start focus does not take the place where Reset break was, so a repeated press there cannot skip the break — the exact arrangement is settled at the screens stage
 
 ### AC-11 (US-06) — domain invariant
 
-**Given** the User was operating the controls with the keyboard
-**When** the set of controls changes — after a press, or without one (a break auto-starts, a phase completes, the Skip guard ends)
-**Then** keyboard focus is never left on a control that disappeared or became unavailable: it moves to the main position — within the Skip guard that is the greyed-out Start focus, so a reflex key press does nothing — and when the main position is empty (Focus running with Allow pausing focus off) it moves to the phase name and countdown, never onto Reset focus; the phase change is announced the way phase changes already are
+**Given** keyboard focus is on one of the timer's controls
+**When** the set of controls changes — after a press, or without one (a break auto-starts, a phase completes, the Skip guard ends, a setting hides a control)
+**Then** keyboard focus is never left on a control that disappeared or became unavailable: it moves to the main position — within the Skip guard that is the greyed-out Start focus, which can still hold keyboard focus, so a reflex key press does nothing — and when the main position is empty (Focus running with Allow pausing focus off) it moves to the phase name and countdown, never onto Reset focus; keyboard focus that is anywhere else (the Task label, a duration field, a setting) is never moved; the phase change is announced the way phase changes already are
 
 ### AC-12 (US-01, US-02, US-03, US-04, US-07) — authorization
 
 **Given** a User's page is open
 **When** an input arrives that did not come from that page's own controls, its own two settings, or its own duration and cycle-length commits — for example a message from another tab, or another tab saving different setting values
-**Then** the page ignores it: the timer and the settings in use change only in direct response to this page's own inputs (core-timer AC-03's guard, extended to the new controls and settings), and values another tab saved are picked up only on this page's next load
+**Then** the page ignores it: the timer and the settings in use change only in direct response to this page's own inputs (core-timer AC-03's guard, extended to the new controls and settings); values of Auto-start breaks and Allow pausing focus that another tab saved are picked up only on this page's next load, while saved Configured durations and cycle length keep the read points adjustable-durations already set — page load, and before each fresh start, which now includes a break that auto-starts and a Focus started with Start focus
 
 ### AC-13 (US-01) — cross-context
 
@@ -208,7 +210,7 @@ A control the User's settings never allow (Pause focus with Allow pausing focus 
 
 **Given** the User changes Allow pausing focus
 **When** a Focus phase is running, paused or waiting at that moment
-**Then** the setting is shown next to Auto-start breaks, is off the first time the app is used, keeps the User's choice across reloads, and applies from the next control state it affects without ever altering a phase already in progress — a Focus phase paused before the setting was turned off stays paused and can still be resumed or reset; a Focus phase running when the setting is turned on immediately offers Pause focus
+**Then** the setting is shown next to Auto-start breaks, is off the first time the app is used, keeps the User's choice across reloads, and applies from the next control state it affects without ever altering a phase already in progress — a Focus phase paused before the setting was turned off stays paused and can still be resumed or reset; a Focus phase running when the setting is turned on immediately offers Pause focus, and a Focus phase running when it is turned off loses Pause focus at once and keeps running (keyboard focus moves as in AC-11)
 
 ## 6. Non-functional requirements
 
@@ -216,7 +218,7 @@ A control the User's settings never allow (Pause focus with Allow pausing focus 
 |---|---|---|
 | On-time completion tolerance | a Focus completion noticed ≤ 5 s after its true end counts as On-time and auto-starts the break; > 5 s counts as late and leaves the break waiting | unit test on the timer engine with an injected clock, at 5 s and 5.001 s |
 | Auto-started break accuracy | remaining break time differs from (full length − real time since the Focus end) by ≤ 1 s | unit test with an injected clock; manual stopwatch check on desktop Chrome |
-| Skip guard length | 3 s (± 0.25 s) of real time from the Focus phase's true end | unit test on the guard rule with an injected clock |
+| Skip guard length | 3 s (± 0.25 s) of real time from the break's start — the Focus phase's true end for an auto-started break, the Start break press otherwise | unit test on the guard rule with an injected clock |
 | Start focus response | Focus shown running ≤ 250 ms after the press | manual check during a running break |
 | Chimes per completion | exactly 1, including after a late completion | unit test on the timer engine: one completion → one chime; e2e return-after-sleep check |
 | Self-contained load | zero network requests beyond the initial page load | browser devtools Network tab |
@@ -230,7 +232,7 @@ A control the User's settings never allow (Pause focus with Allow pausing focus 
   - another tab or origin trying to start, skip, pause or reset a phase: ignored by the input guard (AC-12).
   - a hand-edited or corrupted saved value: read as that setting's default, never an error (AC-09).
   - a pause of Focus forced past the hidden control while pausing is not allowed: does nothing (AC-15).
-  - rapid pressing of Start focus right after an auto-start: absorbed by the Skip guard (AC-05); redundant presses otherwise stay no-ops.
+  - rapid pressing of Start focus right after a break starts, automatically or by Start break: absorbed by the Skip guard (AC-05); redundant presses otherwise stay no-ops.
 - **Security review:** N/A — no new data beyond two preferences, no network access, no permission boundary.
 
 ## 7. Metrics / KPIs
