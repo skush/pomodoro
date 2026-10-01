@@ -1,6 +1,6 @@
 # Manual timing check and review checklist — break-flow (T10)
 
-**Status: PARTIAL — the auto-start accuracy and the Start focus response are measured (headless Edge, real clock, automated stopwatch). The real return-after-sleep run is NOT RUN: it needs a device that is actually put to sleep, and this session could not do that. It is still to do by hand before `ship`.**
+**Status: PARTIAL — the auto-start accuracy and the Start focus response are measured (headless Edge, real clock, automated stopwatch). The real return-after-sleep run was done by the owner on 2026-10-01 and FAILED on sound: the screen was right for a Short and a Long break, but no Focus-end chime played and no sound-unavailable notice was shown. This blocks `ship` until fixed (`/sdd:fix break-flow`) and re-run.**
 `spec.md` §6 asks for a "manual stopwatch check on desktop Chrome" (auto-started break accuracy) and a "manual check during a running break" (Start focus response); §7 KPI 4 asks for "one manual return-after-sleep run at merge".
 
 ## Measured on 2026-10-01
@@ -33,7 +33,7 @@ The three fixed slots read side-1 | main | side-2 at 900 px and at 320 px (label
 
 ## Not done — to do by hand
 
-**Return-after-sleep (spec §7 KPI 4, AC-03, §6 "Chimes per completion"): NOT RUN.** The device cannot be put to sleep from this session, so this is recorded as not run, not as passed. The *logic* is covered automatically — a clock jump far past the Focus end leaves the break waiting at full length with exactly one Focus-end chime and no break-end chime, for a Short and a Long break (`test-e2e/break-flow.e2e.js`, AC-03 tests, and `test/logic/ui-autostart.test.js`) — but a jump of a fake clock is not a real sleep.
+**Return-after-sleep (spec §7 KPI 4, AC-03, §6 "Chimes per completion"): FAIL (owner run, 2026-10-01). See the results table below.** It could not be run from the implementation session, so the owner ran it by hand. The *logic* is covered automatically — a clock jump far past the Focus end leaves the break waiting at full length with exactly one Focus-end chime and no break-end chime, for a Short and a Long break (`test-e2e/break-flow.e2e.js`, AC-03 tests, and `test/logic/ui-autostart.test.js`) — but a jump of a fake clock is not a real sleep.
 
 Do once at merge, in desktop Chrome or Edge, with the root `index.html` from `file://`:
 
@@ -44,7 +44,7 @@ Do once at merge, in desktop Chrome or Edge, with the root `index.html` from `fi
 
 | Browser (version) | Date | Slept across the Focus end | Break waiting at full length | One Focus-end chime, no break-end chime | Notes |
 |---|---|---|---|---|---|
-| Chrome / Edge | — | — | — | — | NOT RUN |
+| Chrome / Edge (version not recorded) | 2026-10-01 | yes: Short break and Long break | **pass**: the screen looked right for both | **FAIL**: no Focus-end chime on return, and no sound-unavailable notice (sensory-feedback AC-11) | Owner run. The chime was lost silently, which violates AC-03 and the §6 "exactly 1, including after a late completion" row. The fake-clock e2e passes, so the gap is specific to a real sleep (likely the audio output state after wake). Route: `/sdd:fix break-flow`, then re-run this check |
 
 Also still manual, by feel: pressing Start focus on a real break (the ≤ 250 ms figure above is page-side and synchronous, so it holds in any browser that runs the page).
 
