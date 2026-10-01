@@ -128,18 +128,32 @@ export async function launchPersistent(userDataDir) {
 // page's Date.now() when the oscillator was scheduled and `title` is document.title at that
 // moment (so a test can check the title changed first). `state` is what resume() leaves the
 // context in ('running' or 'suspended'). Every context created is kept on `window.__audioContexts`,
-// so a test can flip one to 'suspended' after the Start press (sound lost mid-phase).
+// so a test can flip one to 'suspended' after the Start press (sound lost mid-phase), or set
+// `frozenAt` on one to stop its clock while the page's clock goes on (a device sleep: the
+// browser keeps saying 'running' but the audio clock has stopped). Like a real context, the
+// clock otherwise follows time: currentTime is seconds of page time since the context was made.
 export function installAudioSpy({ state = 'running' } = {}) {
   window.__tones = [];
   window.__audioContexts = [];
   window.AudioContext = class FakeAudioContext {
     constructor() {
       window.__audioContexts.push(this);
-      this.state = 'suspended';
-      this.currentTime = 0;
+      // like Chrome, a context made after the User has interacted with the page (an earlier
+      // resume() here) starts running by itself
+      this.state = window.__audioUnlocked ? (window.__audioState ?? state) : 'suspended';
+      this.createdAt = Date.now();
+      this.frozenAt = null;
       this.destination = {};
     }
+    get currentTime() {
+      return this.frozenAt ?? (Date.now() - this.createdAt) / 1000;
+    }
+    close() {
+      this.state = 'closed';
+      return Promise.resolve();
+    }
     resume() {
+      window.__audioUnlocked = true;
       this.state = window.__audioState ?? state;
       return Promise.resolve();
     }
