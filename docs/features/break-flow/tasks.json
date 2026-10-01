@@ -208,7 +208,7 @@
         "AC-01",
         "AC-03"
       ],
-      "dod": "The regenerated index.html is committed with the source; npm test, npm run lint and npm run test:e2e are green; the manual notes record the stopwatch accuracy check of an auto-started break (≤ 1 s), the Start focus response (≤ 250 ms) and one real return-after-sleep run (break waiting, one chime).",
+      "dod": "The regenerated index.html is committed with the source; npm test, npm run lint and npm run test:e2e are green; the manual notes record the stopwatch accuracy check of an auto-started break (≤ 1 s), the Start focus response (≤ 250 ms) and one real return-after-sleep run (break waiting; originally one chime, amended 2026-10-01 by the owner to no chime and no notice when the return is more than 2 minutes late, sensory-feedback AC-06b).",
       "files_hint": [
         "index.html",
         "docs/features/break-flow/_review/manual-timing-check.md"

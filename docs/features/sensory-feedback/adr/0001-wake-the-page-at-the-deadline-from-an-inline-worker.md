@@ -175,3 +175,5 @@ narrow carve-out:
   later feature (`docs/roadmap.md` step 6). It has not been tested: no Firefox was available. If the
   worker cannot start there, the main-thread fallback applies and a chime in a long-hidden tab may be
   late. The follow-up feature must run the `file://` Blob-worker check and the hidden-tab timing run.
+
+> **Amendment (2026-10-01, owner):** sensory-feedback `spec.md` AC-06b changed. A stale completion, one the page notices more than 2 minutes after its true moment, plays no chime and shows no sound-unavailable notice, so "exactly one chime per completion" holds for every non-stale completion. The decision recorded here is unchanged; the text above is left as written.

@@ -166,6 +166,41 @@ test('AC-03: a completion noticed more than 2 minutes late (the device slept) le
   });
 });
 
+test('AC-03/AC-06b: a completion noticed at exactly 2 min + 1 ms is stale: no chime, the break still waits and the session is credited', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    await runFocusToEnd(app, 2 * MIN + 1);
+    assert.equal(await app.phase(), 'Short break');
+    assert.equal(await app.countdown(), '5:00');
+    assert.deepEqual(await visibleControls(app), ['Start focus', 'Start break']);
+    assert.deepEqual(await app.tones(), []);
+    assert.match(await app.sessionCount(), /: 1$/);
+  });
+});
+
+test('AC-03/AC-06b: a stale completion shows no notice even when the browser took the sound away before the sleep', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    await app.startFocus().click();
+    await app.page.evaluate(() => { window.__audioContexts[0].state = 'suspended'; }); // sound lost while the device sleeps
+    await app.advance(25 * MIN + 3 * 60 * MIN);
+    assert.equal(await app.phase(), 'Short break');
+    assert.equal(await app.notice().isVisible(), false); // a fresh Start would find the problem; the returning User is not told
+    assert.deepEqual(await app.tones(), []);
+  });
+});
+
+test('AC-02/AC-06b: a break end slept through is stale too: no break-end chime, Focus waits, nothing starts', async () => {
+  await withApp({ audioSpy: {} }, async (app) => {
+    await runFocusToEnd(app); // Focus 1 on time: the short break auto-starts, one Focus-end chime
+    assert.equal(await app.phase(), 'Short break');
+    await app.advance(3 * 60 * MIN); // the device sleeps through the break's end
+    assert.equal(await app.phase(), 'Focus');
+    assert.equal(await app.countdown(), '25:00');
+    assert.deepEqual(await visibleControls(app), ['Start focus']);
+    assert.equal((await app.tones()).length, FOCUS_NOTES); // only the Focus-end chime from before
+    assert.equal(await app.notice().isVisible(), false);
+  });
+});
+
 test('AC-03: a Long break after a late completion also waits at its full length', async () => {
   await withApp({ audioSpy: {}, storage: { 'adjustable-durations:cycle-length': '2' } }, async (app) => {
     await runFocusToEnd(app); // Focus 1, on time: the short break auto-starts

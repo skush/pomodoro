@@ -77,7 +77,7 @@ Internal — no API surface.
 ## Checklist
 
 - [ ] Run `npm run build`, `npm test`, `npm run lint`, `npm run test:e2e`; commit `index.html` with the source.
-- [ ] Stopwatch a real auto-started break on desktop Chrome/Edge; press Start focus mid-break and time the response; put the device to sleep across a Focus end and confirm one chime and a waiting break on return.
+- [ ] Stopwatch a real auto-started break on desktop Chrome/Edge; press Start focus mid-break and time the response; put the device to sleep across a Focus end and confirm a waiting break on return (originally also one chime; amended 2026-10-01 by the owner: no chime and no notice when the return is more than 2 minutes late, sensory-feedback AC-06b).
 - [ ] Record the results in `docs/features/break-flow/_review/manual-timing-check.md` (same shape as `docs/features/sensory-feedback/_review/manual-timing-check.md`).
 
 ## Edge cases
@@ -89,6 +89,6 @@ Internal — no API surface.
 
 ## Definition of Done
 
-- [ ] The regenerated index.html is committed with the source; npm test, npm run lint and npm run test:e2e are green; the manual notes record the stopwatch accuracy check of an auto-started break (≤ 1 s), the Start focus response (≤ 250 ms) and one real return-after-sleep run (break waiting, one chime).
+- [ ] The regenerated index.html is committed with the source; npm test, npm run lint and npm run test:e2e are green; the manual notes record the stopwatch accuracy check of an auto-started break (≤ 1 s), the Start focus response (≤ 250 ms) and one real return-after-sleep run (break waiting; originally one chime, amended 2026-10-01 by the owner to no chime and no notice when the return is more than 2 minutes late, sensory-feedback AC-06b).
 - [ ] every Hard Rule inlined above still holds
 - [ ] `npm test` and `npm run lint` clean; `npm run build` regenerated

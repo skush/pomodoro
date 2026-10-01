@@ -33,7 +33,8 @@ guarantee as it is.
    already shows the next phase waiting for Start when it does.
 2. **Exactly-once, completion-only chime**: one chime per Phase completion, never on
    Start/Pause/Resume/Reset/duration commit, never repeated on return to the tab, and a
-   sound-unavailable notice in its place (never a delayed chime) when sound cannot play.
+   sound-unavailable notice in its place (never a delayed chime) when sound cannot play. Neither plays for a
+   stale completion (more than 2 minutes late, AC-06b).
 3. **Accessible, consistent visual cues**: the ring agrees with the countdown within 1 s, it is
    measured against the phase's own starting length, and every text and non-text colour pair meets
    WCAG AA. Reduced motion and 320 CSS px layouts are honoured.
@@ -396,7 +397,7 @@ sequenceDiagram
     end
     UI->>UI: credit the Session counter from justCompletedFocusAt (session-tracking, unchanged)
     Note over UI,Worker: a second wake source finds justCompleted null, so no second chime
-    Note over UI,Engine: Postcondition: one chime or one notice, the next phase idle so nothing can complete unattended
+    Note over UI,Engine: Postcondition: one chime or one notice (neither for a stale completion), the next phase idle so nothing can complete unattended
 ```
 
 ### Flow 4: Render tick, ring and Tab title mirror (AC-01, AC-02, AC-03, AC-04)

@@ -235,6 +235,6 @@ non-goal).
 | AC-08 | Flow US-01 → self-edges on B and C (commit while running or paused) | ring keeps the starting length; Reset → A gives the new full length |
 | AC-09 | Flow US-01 → self-edge on A; Flow US-03 → A→J | ring full and title in new whole minutes immediately |
 | AC-10 | Flow US-04 → F→J and G→K | Session counter credited for Focus, unchanged for breaks; the midnight case is in the node text |
-| AC-11 | Flow US-04 → V→W (at Start or Resume), Z→N (at completion); Flow US-05 → H→J | notice shown early or at completion, stays until a later Start or Resume finds sound working |
+| AC-11 | Flow US-04 → V→W (at Start or Resume), Z→N (at completion); Flow US-05 → H→I | notice shown early or at completion, stays until a later Start or Resume finds sound working |
 | AC-12 | Flow US-05 → node A | the User's own Start press enables sound; no permission prompt in any flow |
 | AC-13 | Flow US-06 → nodes B, C, D, E | 320 px, three-digit countdown, validation message and sound notice all visible; contrast is a §6 NFR |

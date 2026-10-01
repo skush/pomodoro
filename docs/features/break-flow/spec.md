@@ -104,7 +104,7 @@ Traceability — this spec **supersedes** the following shipped criteria for the
 
 **Given** any break is running, whether it auto-started or the User started it
 **When** the break reaches zero
-**Then** the break-end chime plays once and the next Focus phase is shown at its full length, waiting for the User to press Start focus — a Focus phase never starts on its own, with Auto-start breaks on or off, so at most one phase per completion ever starts without the User
+**Then** the break-end chime plays once (not when the end is only noticed more than 2 minutes late — sensory-feedback AC-06b) and the next Focus phase is shown at its full length, waiting for the User to press Start focus — a Focus phase never starts on its own, with Auto-start breaks on or off, so at most one phase per completion ever starts without the User
 
 ### AC-03 (US-05) — cross-context
 
@@ -188,7 +188,7 @@ These lists are complete: a waiting phase shows no pause or reset control. A con
 
 **Given** a break has auto-started (AC-01)
 **When** the User looks at, or listens for, the sensory cues
-**Then** the ring starts full and shrinks with the break, the tab title shows the break running (not waiting), the break-end chime plays at its completion as usual, and if sound cannot be played when the break auto-starts, the sound-unavailable notice (sensory-feedback AC-11) appears at that moment rather than only at the next press
+**Then** the ring starts full and shrinks with the break, the tab title shows the break running (not waiting), the break-end chime plays at its completion as usual (unless that completion is only noticed more than 2 minutes late, sensory-feedback AC-06b), and if sound cannot be played when the break auto-starts, the sound-unavailable notice (sensory-feedback AC-11) appears at that moment rather than only at the next press
 
 ### AC-14 (US-01, US-04) — cross-context
 
@@ -263,7 +263,7 @@ Every §5 criterion maps to ≥1 test. Unit tests run against the pure logic wit
 |---|---|---|---|
 | AC-01 happy path | on-time focus completion auto-starts the correct break from its full length | unit | one chime, completion credited once, break running; remaining time within 1 s of (full length − time since the focus end); length re-read from current Configured duration |
 | AC-01 happy path | auto-started break shows running ring and tab title | e2e-through-UI | focus ends in an open tab → break phase name, full-then-shrinking ring and running title appear with no press |
-| AC-02 domain invariant | finished break leaves the next focus waiting, with auto-start on or off | unit | break-end chime once; focus at full length, stopped; never started by itself |
+| AC-02 domain invariant | finished break leaves the next focus waiting, with auto-start on or off | unit | break-end chime once (none when noticed more than 120 s late); focus at full length, stopped; never started by itself |
 | AC-03 cross-context | late focus completion leaves the break waiting at full length, including a long break | unit | completion noticed after 5.001 s → break waiting, no countdown, no break-end chime; one focus-end chime up to 120 s late, none (and no notice) at 120.001 s |
 | AC-03 cross-context | returning after sleep shows a waiting break | e2e-through-UI | after the device sleeps past the focus end, the page shows the break waiting with Start break and Start focus offered |
 | AC-04 happy path | start focus ends a short, long, running, paused or waiting break at once | unit | break ends silently; focus running from the current Configured focus duration |
@@ -314,7 +314,7 @@ Every §5 criterion maps to ≥1 test. Unit tests run against the pure logic wit
 
 <!-- N/A: no numeric NFR -->
 
-No throughput or latency-under-load target exists. The numeric §6 targets are timing rules, covered by the unit rows above: 5 s on-time tolerance (checked at 5 s and 5.001 s), ≤ 1 s auto-started break accuracy, 3 s ± 0.25 s skip guard, exactly one chime per completion (including late). Start focus response ≤ 250 ms and zero extra network requests are manual checks in a real browser.
+No throughput or latency-under-load target exists. The numeric §6 targets are timing rules, covered by the unit rows above: 5 s on-time tolerance (checked at 5 s and 5.001 s), ≤ 1 s auto-started break accuracy, 3 s ± 0.25 s skip guard, one chime per completion noticed within 2 minutes, none after (checked at 120 s and 120.001 s). Start focus response ≤ 250 ms and zero extra network requests are manual checks in a real browser.
 
 ### CI placement
 

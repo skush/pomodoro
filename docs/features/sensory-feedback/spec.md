@@ -102,7 +102,7 @@ Traceability:
 ### AC-05 (US-04) — happy path
 **Given** a phase is running
 **When** it reaches a Phase completion
-**Then** a Focus completion plays the Focus-end tone, and a Short break or Long break completion plays the break-end tone — the two tones are distinguishable by construction: they differ in melodic direction (one rising, one falling) or in their number of notes, and neither exceeds the §6 loudness ceiling
+**Then** (except a stale completion, AC-06b) a Focus completion plays the Focus-end tone, and a Short break or Long break completion plays the break-end tone — the two tones are distinguishable by construction: they differ in melodic direction (one rising, one falling) or in their number of notes, and neither exceeds the §6 loudness ceiling
 
 ### AC-06 (US-05) — happy path
 **Given** a phase is running in a desktop browser (§3), the timer's tab is in the background, and the device stays awake — for any length of time
@@ -117,7 +117,7 @@ Traceability:
 ### AC-07 (US-04) — domain invariant
 **Given** the User is using the timer
 **When** they press Start, Pause, Resume or Reset, or commit a duration or cycle-length change
-**Then** no chime plays — the Completion chime plays only at a Phase completion, and exactly once per completion (never again when the User returns to the tab); a Pause or Reset pressed an instant before zero means that phase does not complete, so its chime never plays
+**Then** no chime plays — the Completion chime plays only at a Phase completion, and exactly once per completion, except a stale one (AC-06b) (never again when the User returns to the tab); a Pause or Reset pressed an instant before zero means that phase does not complete, so its chime never plays
 
 ### AC-08 (US-01) — domain invariant
 **Given** a phase is running or paused, and the User commits a new Configured duration for that same phase type
@@ -132,12 +132,12 @@ Traceability:
 ### AC-10 (US-04) — cross-context
 **Given** a Focus phase is running
 **When** it reaches its Phase completion
-**Then** the Focus-end chime plays, and that same completion is credited to the Session counter exactly as session-tracking decides (`docs/features/session-tracking/spec.md` AC-04 and AC-06) — normally today's count goes up by exactly one; a completion whose true moment fell before a midnight that has since passed is not carried into the new day's count, and still chimes when it is noticed within 2 minutes of its true moment (AC-06b) and not otherwise; a break completion chimes and never changes the Session counter
+**Then** the Focus-end chime plays (except a stale completion, AC-06b), and that same completion is credited to the Session counter exactly as session-tracking decides (`docs/features/session-tracking/spec.md` AC-04 and AC-06) — normally today's count goes up by exactly one; a completion whose true moment fell before a midnight that has since passed is not carried into the new day's count, and still chimes when it is noticed within 2 minutes of its true moment (AC-06b) and not otherwise; a break completion chimes (likewise unless stale) and never changes the Session counter
 
 ### AC-11 (US-04) — error
 **Given** sound cannot be played in the User's browser (sound unavailable, blocked, or silently suspended by the browser)
 **When** the User presses Start or Resume, or a phase reaches its Phase completion
-**Then** the phase runs and completes exactly as usual — Session counter, ring and tab title are unaffected and nothing breaks — and the page tells the User in plain language that the completion sound is unavailable, so they know to rely on the ring and the tab title instead; the notice appears as soon as the problem is found at Start or Resume (before the phase runs unattended) or at the completion, and stays until a later Start or Resume finds sound working. A muted operating system or unplugged speakers cannot be seen by the page and are outside this criterion
+**Then** the phase runs and completes exactly as usual — Session counter, ring and tab title are unaffected and nothing breaks — and the page tells the User in plain language that the completion sound is unavailable, so they know to rely on the ring and the tab title instead; the notice appears as soon as the problem is found at Start or Resume (before the phase runs unattended) or at the completion (not for a stale completion, AC-06b), and stays until a later Start or Resume finds sound working. A muted operating system or unplugged speakers cannot be seen by the page and are outside this criterion
 
 ### AC-12 (US-05) — authorization
 **Given** the User has granted the page no browser permissions

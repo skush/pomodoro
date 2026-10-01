@@ -1,6 +1,6 @@
 # Manual timing check and review checklist — break-flow (T10)
 
-**Status: PARTIAL — the auto-start accuracy and the Start focus response are measured (headless Edge, real clock, automated stopwatch). The real return-after-sleep run was done by the owner on 2026-10-01: the screen was right for a Short and a Long break. No Focus-end chime was heard on return, which led the owner to change the requirement the same day — a completion noticed more than 2 minutes late plays no chime and shows no notice (sensory-feedback AC-06b). Under that requirement the observed behaviour is the expected one, so the item is closed (T10 done). The final build has not been put through another real sleep; the new rule is covered by unit and fake-clock e2e tests.**
+**Status: COMPLETE (the return-after-sleep item accepted by the owner under the 2026-10-01 requirement change) — the auto-start accuracy and the Start focus response are measured (headless Edge, real clock, automated stopwatch). The real return-after-sleep run was done by the owner on 2026-10-01: the screen was right for a Short and a Long break. No Focus-end chime was heard on return, which led the owner to change the requirement the same day — a completion noticed more than 2 minutes late plays no chime and shows no notice (sensory-feedback AC-06b). Under that requirement the observed behaviour is the expected one, so the item is closed (T10 done). The final build has not been put through another real sleep; the new rule is covered by unit and fake-clock e2e tests.**
 `spec.md` §6 asks for a "manual stopwatch check on desktop Chrome" (auto-started break accuracy) and a "manual check during a running break" (Start focus response); §7 KPI 4 asks for "one manual return-after-sleep run at merge".
 
 ## Measured on 2026-10-01
@@ -33,7 +33,7 @@ The three fixed slots read side-1 | main | side-2 at 900 px and at 320 px (label
 
 ## Not done — to do by hand
 
-**Return-after-sleep (spec §7 KPI 4, AC-03, §6 "Chimes per completion"): PASS under the changed requirement (owner run, 2026-10-01). See the results table below.** It could not be run from the implementation session, so the owner ran it by hand. The *logic* is covered automatically — a clock jump far past the Focus end leaves the break waiting at full length with exactly one Focus-end chime and no break-end chime, for a Short and a Long break (`test-e2e/break-flow.e2e.js`, AC-03 tests, and `test/logic/ui-autostart.test.js`) — but a jump of a fake clock is not a real sleep.
+**Return-after-sleep (spec §7 KPI 4, AC-03, §6 "Chimes per completion"): PASS under the changed requirement (owner run, 2026-10-01). See the results table below.** It could not be run from the implementation session, so the owner ran it by hand. The *logic* is covered automatically — a clock jump past the Focus end leaves the break waiting at full length with no break-end chime, and with one Focus-end chime when it is within 2 minutes or none (and no notice) when later, for a Short and a Long break (`test-e2e/break-flow.e2e.js`, AC-03 tests, and `test/logic/ui-autostart.test.js`) — but a jump of a fake clock is not a real sleep.
 
 Do once at merge, in desktop Chrome or Edge, with the root `index.html` from `file://`:
 

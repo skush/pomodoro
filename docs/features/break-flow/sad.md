@@ -33,7 +33,7 @@ and no network access, and it supersedes only the core-timer and sensory-feedbac
 1. **No lost or stolen breaks.** A break auto-starts only after an On-time completion (≤ 5 s after
    the Focus phase's true end) and counts down from that true end within 1 s. A late completion
    leaves it waiting at full length. At most one phase starts per completion, Focus never does, and
-   exactly one chime plays per completion.
+   one chime plays per completion noticed within 2 minutes of its true moment, none for a stale one (sensory-feedback AC-06b).
 2. **Reflex-proof, phase-labelled controls.** Every control names its phase. Start focus is
    unavailable for 3 s (± 0.25 s) of real time after any break start. A pause of Focus that isn't
    allowed does nothing, whatever the input path. Keyboard focus never stays on a control that
@@ -374,8 +374,8 @@ sequenceDiagram
 The page notices the Focus end through whichever wake source runs first. If Auto-start breaks is
 on and the end was noticed within 5 s, the UI re-reads the saved durations, starts the break
 backdated to the true Focus end, and re-arms the wake-up for the break. Otherwise the break stays
-waiting at full length. In both cases the Focus-end chime (or the notice) and the session credit
-come once, from the snapshot that carried the completion. The ring, title and controls show what
+waiting at full length. In both cases the session credit, and the Focus-end chime (or the notice) unless the completion is
+stale (more than 2 minutes after its true end: neither), come once, from the snapshot that carried the completion. The ring, title and controls show what
 is now on screen. When an auto-started break later reaches zero, the existing completion path runs
 again and leaves Focus waiting, because only a Focus completion enters the auto-start branch
 (AC-02).
@@ -466,7 +466,7 @@ sequenceDiagram
 Every break control acts only on the break and never starts Focus. A break paused inside the Skip
 guard keeps Start focus greyed until three real seconds have passed since the break's start, and
 Resume break starts no new guard. A running break that reaches zero always leaves Focus waiting,
-with one break-end chime, whether it was auto-started or started by the User and whatever
+with one break-end chime (none if the break end is only noticed more than 2 minutes late), whether it was auto-started or started by the User and whatever
 Auto-start breaks says (AC-02). A change to a Configured duration made after a break started leaves
 that break at its length and takes effect at Reset break or the next fresh start (AC-14).
 

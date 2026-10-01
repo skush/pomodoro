@@ -153,6 +153,7 @@ test('AC-06b: when the page runs again within 2 minutes of the deadline the chim
 test('AC-06b: when the page runs again more than 2 minutes after the deadline there is no chime and no notice, and the next phase waits for Start', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
     await app.startFocus().click();
+    await app.page.evaluate(() => { window.__audioContexts[0].state = 'suspended'; }); // the likely real state after a sleep
     await app.advance(3 * 60 * MIN); // device slept for three hours
     assert.deepEqual(await app.tones(), []); // the User who comes back needs no late sound
     assert.equal(await app.notice().isVisible(), false); // and is not told sound is unavailable
