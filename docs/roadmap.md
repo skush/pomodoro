@@ -25,7 +25,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | 4 | [Adjustable durations + cycle length](features/adjustable-durations/spec.md) | `idea-brief.md` §7 Recommendation | S | shipped |
 | 5 | [Sensory feedback (progress ring, tab-title mirror, chime, dark UI)](features/sensory-feedback/spec.md) | `idea-brief.md` §1 Raw idea | S | shipped |
 | 6 | Firefox support for the background chime (hidden-tab timing run, `file://` worker check) | [`sensory-feedback/spec.md`](features/sensory-feedback/spec.md) §3 | XS | fog — nice-to-have, much later |
-| 7 | [Break flow (auto-start breaks, Start focus during a break, Allow pausing focus)](features/break-flow/spec.md) | owner's daily use (2026-10-01) | S | spec'd |
+| 7 | [Break flow (auto-start breaks, Start focus during a break, Allow pausing focus)](features/break-flow/spec.md) | owner's daily use (2026-10-01) | S | shipped |
 
 ## Not yet specified
 
@@ -86,3 +86,4 @@ flowchart LR
 | Session tracking (task label + daily counter) | 2026-09-29 | [changelog](features/session-tracking/CHANGELOG.md) · [review](features/session-tracking/_review/review-2026-09-29.md) · `58fdc5b` |
 | Adjustable durations + cycle length | 2026-09-29 | [changelog](features/adjustable-durations/CHANGELOG.md) · [review](features/adjustable-durations/_review/review-2026-09-29.md) · `e7c77dd` |
 | Sensory feedback (ring, tab title, chime) | 2026-09-30 | [changelog](features/sensory-feedback/CHANGELOG.md) · [review](features/sensory-feedback/_review/review-2026-09-30.md) · [PR #1](https://github.com/skush/pomodoro/pull/1) · `61326ff` |
+| Break flow (auto-start breaks, Start focus, Allow pausing focus) | 2026-10-01 | [changelog](features/break-flow/CHANGELOG.md) · [review](features/break-flow/_review/review-2026-10-01.md) · PR pending |
