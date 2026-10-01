@@ -321,140 +321,195 @@ the "no pausing Focus" rule are enforced, so no input path can get around them.
 
 ## 6. Runtime view
 
-<!-- 🎯 Why: the RUNTIME FLOW of 1–2 critical scenarios — who talks to whom, when, in what order.
-     Without §6, §5 is just boxes with no life.
-     📋 Write: a Mermaid sequenceDiagram. Participants are names from §5 (don't invent new ones).
-     Messages are semantic («saves a draft»), NO HTTP verbs / paths / status codes — endpoint-level
-     sequences arrive at the `api` stage.
-     📌 e.g. «author → web: composes draft → web → content API: save». Seed the primary flow(s) here;
-     the `sequences` stage then covers every §5 AC (no cap). Never N/A for M+; XS/S keeps ≥1 happy-path flow. -->
-
-**Critical flow 1: <flow name>**
+**Critical flow 1: Focus completion → break auto-starts, or waits after a late completion (ADR-0001)**
 
 ```mermaid
 sequenceDiagram
-    actor Actor
-    participant Web
-    participant Service
-    participant Store
-    Actor->>Web: <action>
-    Web->>Service: <call>
-    Service->>Store: <write>
-    Store-->>Service: ok
-    Service-->>Web: result
-    Web-->>Actor: confirmation
+    actor User
+    participant UI as UI layer
+    participant Worker as Wake-up worker
+    participant Engine as Timer engine
+    participant Store as Local storage
+    participant Audio as Audio output
+
+    Note over UI,Engine: Focus running, wake-up armed for its deadline, tab visible or hidden
+    Worker->>UI: wake (or render tick, or visibilitychange)
+    UI->>Engine: getSnapshot(now)
+    Engine->>Engine: settle - next break loads idle, completion latched once
+    Engine-->>UI: snapshot A - break idle, justCompleted Focus at its true end
+    alt Auto-start breaks on and isOnTimeCompletion(at, now)
+        UI->>Store: pre-start correction - re-read and correct saved durations
+        UI->>Engine: setConfiguredDurations (idle break takes them)
+        UI->>Engine: start(at) - backdated to the true Focus end
+        UI->>Engine: getSnapshot(now)
+        Engine-->>UI: snapshot B - break running, startedAt = at, remaining = full - (now - at)
+        UI->>Worker: arm for the break's remaining time
+    else Auto-start off, or late completion
+        Note over UI: snapshot A is the display snapshot - break waiting at full length
+    end
+    UI->>UI: tab title and ring from the display snapshot (B, or A)
+    alt sound available
+        UI->>Audio: Focus-end tone, once, from snapshot A's completion
+        Audio-->>User: Focus-end chime
+    else sound blocked or suspended
+        UI-->>User: sound-unavailable notice now (AC-13)
+    end
+    UI->>UI: credit the Session counter from snapshot A (session-tracking, unchanged)
+    UI->>UI: controlLayout(display snapshot, now) - Start focus greyed in main slot, or Start break + Start focus
+    UI->>UI: move keyboard focus if its slot changed control (AC-11)
 ```
 
-**Critical flow 2: <e.g. async event propagation>** — <if applicable, otherwise N/A>.
+The page notices the Focus end through whichever wake source runs first. If Auto-start breaks is
+on and the end was noticed within 5 s, the UI re-reads the saved durations, starts the break
+backdated to the true Focus end, and re-arms the wake-up for the break. Otherwise the break stays
+waiting at full length. In both cases the Focus-end chime (or the notice) and the session credit
+come once, from the snapshot that carried the completion. The ring, title and controls show what
+is now on screen. When an auto-started break later reaches zero, the existing completion path runs
+again and leaves Focus waiting, because only a Focus completion enters the auto-start branch
+(AC-02).
+
+**Critical flow 2: Start focus during a break, inside and outside the Skip guard (ADR-0002, ADR-0003)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+    participant Store as Local storage
+    participant Worker as Wake-up worker
+
+    Note over UI: a break is running, paused or waiting, and the main slot shows Start focus
+    User->>UI: presses Start focus
+    UI->>Store: pre-start correction for the fresh Focus (running break untouched)
+    UI->>Engine: startFocus(now)
+    alt Skip guard active (under 3 s since startedAt)
+        Engine->>Engine: no-op - break keeps going
+        Engine-->>UI: snapshot - same break, Start focus still greyed
+    else guard over, or break waiting
+        Engine->>Engine: Focus fresh at the Configured focus duration, running, startedAt = now, focusCount untouched
+        Engine-->>UI: snapshot - Focus running, no justCompleted, so no chime
+        UI->>Worker: arm for Focus remaining time
+    end
+    UI->>UI: render - title, ring, controlLayout, keyboard focus per AC-11
+    UI-->>User: Focus running (at most 250 ms after the press)
+```
+
+**Late completion after a sleep or a frozen tab (AC-03)** — no separate diagram. It is Flow 1's
+"late completion" branch: one Focus-end chime, the session credited as session-tracking decides,
+and the break waiting at full length with Start break and Start focus, since `settle()` leaves it
+idle and nothing starts it. `sequences` expands every §5 AC, including AC-06 (break controls),
+AC-15/AC-17 (focus-pause policy) and AC-11 (keyboard focus).
 
 ## 7. Deployment view
 
-<!-- 🎯 Why: the TOPOLOGY DevOps must know without reading the deploy charts — how many replicas,
-     where the background worker lives, AT WHAT NUMBERS we scale.
-     📋 Write: 2–3 sentences on topology + monitoring + concrete threshold numbers.
-     📌 e.g. «500 authors → partition by quarter» (not «we'll think about scale later»).
-     🎯 N/A allowed for XS/S that reuses an existing deployment unit with no change.
-     Deployment-diagram scaffold → templates/deployment.md. -->
-
-<Topology in 2–3 sentences. Where it runs, replicas, scaling thresholds.>
-
-**Monitoring:**
-- <Metrics — e.g. `<metric_name>`>
-- <Alerts — e.g. «worker lag > 10 min → page on-call»>
-- <Tracing — e.g. spans on the request boundary>
-
-**Scaling thresholds:**
-- <e.g. comfortable in one table up to N rows/year>
-- <e.g. partition by quarter above N rows/year>
-
-<!-- For XS/S with no deployment change: <!-- N/A: reuses existing deployment unit, no infra change --> -->
+<!-- N/A: reuses the existing deployment unit (the one generated, committed index.html, opened from disk or any static host); no infra change, no monitoring, no scaling thresholds for a single-user local page. -->
 
 ## 8. Crosscutting concepts
 
-<!-- 🎯 Why: CROSS-CUTTING PATTERNS spanning several modules: logging, errors, authorization, ID
-     strategy, events, caching. ⭐ The second-densest section. A pattern inside one module is NOT
-     here; a project-wide convention belongs in the convention file.
-     📋 Write: a table — concept / convention / where defined. One row per concept.
-     📌 e.g. «sortable time-based IDs generated in the app layer» as a default from the convention file. -->
-
 | Concept | Convention | Where defined |
 |---|---|---|
-| Logging | <e.g. structured, fields `module=<name>`> | <convention file §X or here> |
-| Authentication | <e.g. token-based via middleware> | <convention file §X> |
-| Error handling | <e.g. domain sentinel → ports error mapping → JSON> | <convention file §X> |
-| ID strategy | <e.g. sortable time-based ID in the app layer> | <convention file §X> |
-| Internationalisation | <e.g. N/A, single language> | — |
-| Observability | <e.g. tracing on the request boundary> | — |
-| Events | <module-specific patterns, if any> | <here> |
+| Time | Every rule is a pure function of wall-clock timestamps passed in as `now`: the deadline, the On-time check (`now − at ≤ 5000 ms`), the Skip guard (`now − startedAt < 3000 ms`, real time, pause doesn't stop it). No tick counting. Tests inject the clock | core-timer ADR-0001; here §4 decisions 3, 4, 6 |
+| One-shot consumption | One render may take two snapshots when it auto-starts a break. Snapshot A (with the completion) feeds the chime/notice and the Session counter credit. The display snapshot (B after an auto-start, else A) feeds the title, ring, controls and wake-up. Fixed order: getSnapshot A → auto-start (correction, `start(at)`, getSnapshot B, re-arm wake-up) → title → ring → chime/notice → credit → controls → keyboard focus | sensory-feedback §8, amended by ADR-0001 |
+| Input guard (authorization) | The engine changes only through methods called by `src/ui/` from this page's own controls, toggles and duration/cycle commits, plus the auto-start branch. There is no `message`/`storage` listener and no `BroadcastChannel`. Both settings are read from storage only at mount, so another tab's saved values apply at the next load (AC-12). Saved durations keep their read points (load + before each fresh start, now including an auto-start and Start focus) | core-timer ADR-0002 (amended by ADR-0002 here) |
+| Persistence | A third gatekeeper, `persistBreakFlowSettings(storage, {autoStartBreaks, allowPausingFocus})`, is the only writer of `break-flow:auto-start-breaks` and `break-flow:allow-pausing-focus` and always writes both, as `'true'`/`'false'`. `readPersistedBreakFlowSettings(storage)` validates each key on its own through `validateStoredToggle(raw, fallback)` and does no write-back; the next toggle writes the full pair. `write-guard.test.js` is extended to allow it | session-tracking ADR-0002, adjustable-durations ADR-0002 |
+| Error handling | Fail-soft. Unreadable, missing or invalid saved value → that setting's default (Auto-start breaks on, Allow pausing focus off). A refused write is swallowed, and the in-memory value applies for the rest of the page load. No error is ever shown (AC-09). A refused Start focus (Skip guard) or pause (policy off) is a silent no-op | `CLAUDE.md`; `spec.md` AC-09 |
+| Accessibility | Every control label names its phase (`CONTROL_LABELS`). A control the settings never allow is `hidden`. The greyed-out Start focus is `aria-disabled="true"`, so it stays focusable and is announced as unavailable. Pause *X* / Resume *X* is one toggle slot. Keyboard focus moves only off a slot that became hidden or holds a different control, to the main slot, or to the phase name + countdown (`tabindex="-1"`) when the main slot is empty, never to Reset focus, and never away from the Task label, a field or a toggle. Phase changes are announced by the existing `aria-live` phase name | ADR-0003; `spec.md` AC-10, AC-11 |
+| Settings UI | Two labelled checkbox toggles, Auto-start breaks and Allow pausing focus, placed next to the duration settings in the same settings area (SCR-07). A toggle applies immediately and never alters a phase already running, paused or waiting | `spec.md` AC-07, AC-17; `ux-flows.md` SCR-07 |
+| Logging / observability | N/A — single-user local page, no telemetry (no network) | — |
+| ID strategy | N/A — no persisted records, two scalar values | `adr/0002-no-backend-for-v1` |
+| Internationalisation | N/A — English only, as the earlier features | — |
 
 ## 9. Architecture decisions
 
-<!-- 🎯 Why: the REVERSE INDEX onto the adr/ folder. `ls adr/` gives the files; §9 gives the
-     semantics — why they exist, which SAD section they attach to, what status.
-     📋 Write: a 4-column table, one row per ADR. Mixed status is fine.
-     📌 e.g. «0001 | Store content as a table of typed blocks | Accepted | §4». -->
-
 | # | Title | Status | Section |
 |---|---|---|---|
-| <NNNN> | <imperative — e.g. "Use a sliding-window counter for rate limiting"> | Accepted | §<N> |
-| <NNNN> | <imperative — e.g. "Co-locate the worker in the API process"> | Accepted | §<N> |
+| [0001](adr/0001-auto-start-breaks-with-a-backdated-start-from-the-ui.md) | Auto-start breaks with a backdated start from the UI, keeping the engine's idle-after-completion rule | Accepted | §4 |
+| [0002](adr/0002-enforce-skip-guard-and-focus-pause-policy-in-the-engine.md) | Enforce the Skip guard and the focus-pause policy inside the engine with two new methods | Accepted | §4 |
+| [0003](adr/0003-derive-controls-from-a-pure-layout-rendered-into-fixed-slots.md) | Derive the phase-labelled controls from a pure layout rule rendered into three fixed slots | Accepted | §4 |
 
-ADR files live under `docs/features/<slug>/adr/NNNN-<title>.md`.
+ADR files live under `docs/features/break-flow/adr/NNNN-<title>.md`. Inline decisions that didn't
+cross the gate are §4 decisions 1, 2, 6 and 7 (target surface, UI architecture, the 5 s / 3 s
+constants, the settings gatekeeper).
 
 ## 10. Quality requirements
 
-<!-- 🎯 Why: the QUALITY TREE — take a goal from §1 and break it into concrete leaves: tests,
-     metrics, configs, drills. ⭐ Without §10, §1 is a manifesto. With §10 each declaration maps
-     to something PROVABLE.
-     📋 Write: per §1 goal — When / Then / How-verify. Numbers from spec §6 NFR VERBATIM (don't
-     round ≤250ms to ≤300ms — that's a critic F6 hit).
-     📌 e.g. «p95 ≤ 500 ms on a block update, verified by a 100 req/s load test». -->
+Each top-3 goal from §1 expanded into scenarios. Numbers are quoted from `spec.md` §6.
 
-Each top-3 goal from §1 expanded into a full scenario:
+**QG-1. No lost or stolen breaks**
 
-**QG-1. <quality attribute>**
-- **When:** <trigger condition>
-- **Then:** <expected behaviour with numbers from spec §6 NFR>
-- **How verify:** <test / chaos drill / load test / metric>
+- **QG-1a On-time tolerance.**
+  - **When:** a Focus phase ends with Auto-start breaks on.
+  - **Then:** "a Focus completion noticed ≤ 5 s after its true end counts as On-time and auto-starts the break; > 5 s counts as late and leaves the break waiting".
+  - **How verify:** "unit test on the timer engine with an injected clock, at 5 s and 5.001 s", on `isOnTimeCompletion` and the auto-start orchestration (ADR-0001).
+- **QG-1b Auto-started break accuracy.**
+  - **When:** a break has auto-started after an On-time completion noticed up to 5 s late.
+  - **Then:** "remaining break time differs from (full length − real time since the Focus end) by ≤ 1 s".
+  - **How verify:** "unit test with an injected clock; manual stopwatch check on desktop Chrome", on `engine.start(at)` with a backdated `at`.
+- **QG-1c Chimes per completion.**
+  - **When:** any phase completes, on time or late, auto-started break or not.
+  - **Then:** chimes per completion: "exactly 1, including after a late completion". After a late Focus completion the break is waiting, no break-end chime plays (AC-03), and Focus never starts by itself (AC-02).
+  - **How verify:** "unit test on the timer engine: one completion → one chime; e2e return-after-sleep check" (`test-e2e/break-flow.e2e.js`, fake page clock).
 
-**QG-2. <quality attribute>**
-- **When:** <trigger>
-- **Then:** <expected>
-- **How verify:** <how>
+**QG-2. Reflex-proof, phase-labelled controls**
 
-**QG-3. <quality attribute>**
-- **When:** <trigger>
-- **Then:** <expected>
-- **How verify:** <how>
+- **QG-2a Skip guard.**
+  - **When:** Start focus is pressed after a break starts, auto-started or by Start break, including while paused.
+  - **Then:** Skip guard length "3 s (± 0.25 s) of real time from the break's start — the Focus phase's true end for an auto-started break, the Start break press otherwise". Inside it the press does nothing. Resume break starts no new guard, and a waiting break has none.
+  - **How verify:** "unit test on the guard rule with an injected clock" (`isSkipGuardActive`, `engine.startFocus`).
+- **QG-2b Start focus response.**
+  - **When:** Start focus is pressed outside the guard during a running break.
+  - **Then:** "Focus shown running ≤ 250 ms after the press" (the click handler renders synchronously).
+  - **How verify:** "manual check during a running break".
+- **QG-2c Focus-pause policy and labels.**
+  - **When:** Allow pausing focus is off and a pause of a running Focus is requested by any path; or any phase × state is shown.
+  - **Then:** the pause does nothing and Focus keeps running (AC-15). Every state shows exactly the AC-10 controls with phase-named labels, and keyboard focus follows AC-11 as decided in §1 ¶4.
+  - **How verify:** unit tests on `engine.pause` with the policy off and on `controlLayout` over every AC-10 row; e2e keyboard-focus checks after a press, an auto-start and the guard ending.
+
+**QG-3. Fail-soft settings, self-contained page**
+
+- **QG-3a Settings fallback.**
+  - **When:** a saved setting is missing, unreadable or invalid, or the browser refuses to save it.
+  - **Then:** the default applies (Auto-start breaks on, Allow pausing focus off), a refused change still applies for this page load, and no error is shown (AC-09). Another tab's saved values are ignored until the next load (AC-12).
+  - **How verify:** unit tests on `validateStoredToggle` and the gatekeeper pair with a fake and a throwing storage, and `write-guard.test.js` extended.
+- **QG-3b Self-contained load.**
+  - **When:** the page is loaded and used through a full cycle with auto-started breaks.
+  - **Then:** "zero network requests beyond the initial page load".
+  - **How verify:** "browser devtools Network tab" (the existing e2e zero-request check covers the build).
 
 ## 11. Risks and technical debt
 
-<!-- 🎯 Why: ⭐ collects EVERYTHING that can break — not only the technical. Without §11 risks get
-     discussed at standups and lost; debt lives only in the head of whoever accepted it.
-     📋 Write: a risk/debt table — severity — mitigation — owner. Accepted debt in its own block.
-     📌 The first risk is often a product risk, not a technical one. That's normal. -->
-
-<!-- Severity literals: Low / Medium / High for regular risks; "Open question" for rows created by
-     a Save-as-OQ resolution during the Socratic walk (see references/socratic.md). -->
-
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
-| <e.g. Worker lag may reach hours during a downstream outage> | Medium | <alert >10 min, on-call playbook, retry backoff> | <DevOps> |
-| <e.g. No event-schema versioning in v1> | Medium | <ADR-NNNN planned for v2, tolerate unknown fields> | <Backend> |
-| Open architectural decision: <decision-headline> | Open question | Resolve before <stage trigger or YYYY-MM-DD>; <inline rationale from the Save-as-OQ> | <owner> |
+| The render-orchestration order (ADR-0001) is easy to break: taking the display snapshot first, or reading the chime from snapshot B, would drop the Focus-end chime or the session credit, or play it twice | Medium | Extract the auto-start step into an exported, injectable function in `src/ui/` (like `applyCompletionCue`) with a unit test asserting one chime + one credit + break running. The e2e auto-start test covers the wired path | Tech Lead |
+| The wake-up worker isn't re-armed after an auto-start that happened in a render tick, so the break-end chime is late if the tab is hidden afterwards | Medium | The auto-start step calls `syncWakeup` with the display snapshot (§6 Flow 1). There's a unit test for it | Tech Lead |
+| A present User in a background tab of a browser outside the background timing promise (e.g. Firefox) gets a late completion, so the break waits instead of auto-starting | Low | Accepted by `spec.md` AC-01. Firefox background timing stays a parked roadmap item | PM (sergii.kushnir@gmail.com) |
+| Amending pinned contracts: the engine surface goes from 6 to 8 methods, the snapshot shape grows, `controlStates`/`refocusIfStranded` are removed, and the e2e helpers and scripts (`test-e2e/helpers.js`, `durations.e2e.js`, `sensory-feedback-chime.e2e.js`) select buttons labelled Start/Pause/Reset | Low | ADR-0002 records the amendment of core-timer ADR-0002. `tasks` includes updating the pins and the existing e2e selectors to the phase-labelled controls | Tech Lead |
+| The pause toggle reading of AC-11 (§1 ¶4) depends on Pause and Resume sharing one slot in the final arrangement | Low | `screens` keeps them in one slot. `controlLayout` returns them at the same index | PM (sergii.kushnir@gmail.com) |
+| `spec.md` §8 open questions still owned by the PM: a 3 s Skip guard long enough (due 7 days after ship), a harder-to-skip Long break (due before `tasks`), Reset focus confirmation (due before `screens`) | Low | Each lands as a constant or layout change (ADR-0002 Neutral, ADR-0003). No design rework | PM (sergii.kushnir@gmail.com) |
+| `docs/architecture-map.md` is stale (`reflects_commit 9c8717e`, 114 commits behind) | Low | This SAD was drafted from a direct read of `HEAD`. Run `/sdd:survey` after this feature ships | Tech Lead |
 
 **Accepted debt (acceptable in v1, plan to fix later):**
-- <e.g. the entity is immutable / unversioned — OK for v1, may need audit versioning in v2>
+- No coordination between two open tabs: each keeps the setting values it loaded with until it
+  reloads (`spec.md` §3).
+- In private browsing or with site storage blocked, both settings return to their defaults at every
+  reload (`spec.md` §3).
 
 ## 12. Glossary
 
-<!-- 🎯 Why: ⭐ the DOMAIN GLOSSARY that ends arguments a year later («checkpoint — weekly or
-     biweekly? quarter — calendar or fiscal?»).
-     📋 Write: a term / meaning table. Business + technical terms mixed.
-     📌 e.g. «Lesson | a unit inside a course made of blocks (text, video)». -->
+Domain terms are canonical in [`CONTEXT.md`](./CONTEXT.md) (feature) and the root
+[`CONTEXT.md`](../../../CONTEXT.md). This table restates them and adds the design terms.
 
 | Term | Meaning |
 |---|---|
-| <e.g. domain object A> | <its meaning in this domain> |
-| <e.g. domain object B> | <its meaning> |
-| <e.g. domain invariant name> | <the rule, in plain language> |
+| Auto-start breaks | The User's on/off setting (on by default, saved) that makes a break start counting down by itself after an On-time completion of a Focus phase. Never auto-starts Focus |
+| Allow pausing focus | The User's on/off setting (off by default, saved) that decides whether a running Focus phase can be paused. Breaks can always be paused |
+| On-time completion | A Focus completion the page notices ≤ 5 s after its true end. Only this auto-starts a break |
+| Late completion | A completion noticed more than 5 s after its true end (sleep, lock, frozen tab). The break is shown waiting at full length |
+| Skipped break | A break ended early with Start focus. No chime, and no change to the in-cycle focus count, the Session counter or the Long-break cadence |
+| Discarded focus | A Focus phase ended early with Reset focus. Never counted as a Focus session |
+| Skip guard | The 3 s of real time after a break's fresh start during which Start focus does nothing. Measured from the true Focus end (auto-start) or the Start break press, not extended by a pause, not restarted by Resume |
+| Backdated start | The UI's `engine.start(at)` call for an auto-started break, where `at` is the Focus phase's true end rather than the moment the page noticed it (ADR-0001) |
+| `startedAt` | Snapshot field: the timestamp of the current phase's fresh start (null while waiting), kept through pause and resume. The Skip guard is measured from it (ADR-0002) |
+| Control layout | The pure `controlLayout(snapshot, now)` result: the action in the main slot and the two side slots, and whether the main one is greyed out (ADR-0003) |
+| Main position / slot | The first of the three fixed control slots. It holds the primary action of the state; keyboard focus falls back to it |
+| Pause toggle | Pause *X* and Resume *X* of the same phase, treated as one control in one slot. Keyboard focus stays on it across a press (§1 ¶4) |
