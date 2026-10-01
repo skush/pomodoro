@@ -562,9 +562,9 @@ describe('duration write-guard reader call sites (adjustable-durations review fi
 
   // break-flow T6 (sad.md §5, ADR-0003): the pre-start correction is re-pinned from the
   // single Start click handler to the legitimate fresh-start triggers — the Start break and
-  // Start focus handlers (T7 adds the auto-start step as the third).
-  test('refreshConfigFromStorage (the pre-start correction) is called only by the Start break and Start focus handlers', () => {
-    assert.deepEqual(callersOf('refreshConfigFromStorage'), ['handleStartBreak', 'handleStartFocus']);
+  // Start focus handlers, plus (T7) the auto-start step's prepareAutoStart.
+  test('refreshConfigFromStorage (the pre-start correction) is called only by the Start break and Start focus handlers and the auto-start step', () => {
+    assert.deepEqual(callersOf('refreshConfigFromStorage'), ['handleStartBreak', 'handleStartFocus', 'prepareAutoStart']);
   });
 
   test('each of those handlers unlocks sound first, then corrects, then starts — in that order', () => {
@@ -722,9 +722,9 @@ describe('phase-labelled controls wiring (break-flow T6)', () => {
     }
   });
 
-  test('mount builds createControls and render() paints controlLayout(snapshot, now)', () => {
+  test('mount builds createControls and render() paints controlLayout(display, now) — the display snapshot', () => {
     assert.equal(/createControls\(/.test(uiContents), true);
-    assert.equal(/controls\.update\(\s*controlLayout\(snapshot, now\)/.test(uiContents), true);
+    assert.equal(/controls\.update\(\s*controlLayout\(display, now\)/.test(uiContents), true);
   });
 
   test('every layout action has a handler', () => {

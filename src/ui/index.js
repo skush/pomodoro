@@ -20,6 +20,7 @@ import {
   validateStoredCycleLength,
   validateStoredToggle,
   DEFAULT_BREAK_FLOW_SETTINGS,
+  isOnTimeCompletion,
   validateDurationInput,
   validateCycleLengthInput,
   ringFraction,
@@ -367,6 +368,47 @@ export function applyVisualCues(snapshot, { ring, setTitle }) {
   }
 }
 
+// break-flow T7 (ADR-0001, sad.md §6 Flow 1, spec.md AC-01/AC-03): the auto-start step.
+// `snapshot` is snapshot A, the one carrying the one-shot completion record. When it is an
+// On-time Focus completion (noticed <= 5 s after its true end) and Auto-start breaks is on,
+// the break the engine just loaded idle is started — after the same pre-start correction any
+// fresh start gets — with the Focus phase's TRUE end as its start time, so the countdown is
+// exact whenever the page got round to noticing. Returns the display snapshot: snapshot B
+// (break running) after an auto-start, else A untouched. A late completion, the setting off,
+// or a break completion starts nothing: a Focus phase never starts on its own (AC-02), and
+// the engine's settle rule is unchanged. Fail-soft: a failing correction leaves the break
+// waiting, exactly as a late completion would.
+export function autoStartBreak({ snapshot, now, enabled, engine, prepare }) {
+  const completed = snapshot.justCompleted;
+  if (!enabled || !completed || completed.phase !== PHASES.FOCUS) return snapshot;
+  if (!isOnTimeCompletion(completed.at, now)) return snapshot;
+  try {
+    prepare();
+  } catch {
+    return snapshot;
+  }
+  engine.start(completed.at);
+  return engine.getSnapshot(now);
+}
+
+// break-flow T7 (sad.md §8 One-shot consumption): everything one render does with the
+// engine, in its fixed order — getSnapshot A -> auto-start (correction, start(at),
+// getSnapshot B, re-arm the wake-up) -> title -> ring -> chime/notice -> Session credit.
+// The chime, the notice and the credit read snapshot A (it alone carries the completion);
+// the title, ring, controls and wake-up read the DISPLAY snapshot (B after an auto-start,
+// else A), which the caller keeps as `lastSnapshot` so the wake-up callback's
+// syncWakeup(lastSnapshot) re-arms the break instead of cancelling the alarm the auto-start
+// just set. Returns both so the caller can finish the render (text, controls).
+export function renderCycle({ engine, now, autoStartBreaks, prepare, visual, cue, credit, wakeup }) {
+  const snapshot = engine.getSnapshot(now);
+  const display = autoStartBreak({ snapshot, now, enabled: autoStartBreaks, engine, prepare });
+  if (display !== snapshot) syncWakeup(display, wakeup);
+  applyVisualCues(display, visual);
+  applyCompletionCue(snapshot, cue);
+  credit(now, snapshot.justCompletedFocusAt);
+  return { snapshot, display };
+}
+
 export function mount(root, engine) {
   root.innerHTML = '';
   const card = document.createElement('div');
@@ -588,25 +630,32 @@ export function mount(root, engine) {
 
   function render() {
     const now = Date.now();
-    const snapshot = engine.getSnapshot(now);
-    lastSnapshot = snapshot;
-    const phaseText = PHASE_LABELS[snapshot.phase] ?? snapshot.phase;
-    if (label.textContent !== phaseText) label.textContent = phaseText;
-    const countdownText = formatDuration(snapshot.remainingMs);
-    if (countdown.textContent !== countdownText) countdown.textContent = countdownText;
-    // sad.md §8 One-shot consumption: fixed order title -> ring -> chime/notice -> Session
-    // counter.
-    applyVisualCues(snapshot, {
-      ring,
-      setTitle: (text) => {
-        if (document.title !== text) document.title = text;
+    // sad.md §8 One-shot consumption: renderCycle owns the fixed order (snapshot A ->
+    // auto-start -> title -> ring -> chime/notice -> Session credit); what the page shows
+    // and re-arms from is the display snapshot it returns.
+    const { display } = renderCycle({
+      engine,
+      now,
+      autoStartBreaks: breakFlow.autoStartBreaks,
+      prepare: prepareAutoStart,
+      visual: {
+        ring,
+        setTitle: (text) => {
+          if (document.title !== text) document.title = text;
+        },
       },
+      cue: { player: chimePlayer, setNotice },
+      credit: updateSessionCount,
+      wakeup,
     });
-    applyCompletionCue(snapshot, { player: chimePlayer, setNotice });
-    updateSessionCount(now, snapshot.justCompletedFocusAt);
+    lastSnapshot = display;
+    const phaseText = PHASE_LABELS[display.phase] ?? display.phase;
+    if (label.textContent !== phaseText) label.textContent = phaseText;
+    const countdownText = formatDuration(display.remainingMs);
+    if (countdown.textContent !== countdownText) countdown.textContent = countdownText;
     // break-flow T6 (AC-10/AC-11): the controls follow the snapshot; keyboard focus that
     // would be stranded moves to the main slot, or to the phase name when main is empty.
-    controls.update(controlLayout(snapshot, now), label);
+    controls.update(controlLayout(display, now), label);
   }
 
   // sensory-feedback T10: the wake-up only re-runs render() (a read) and re-arms from
@@ -637,6 +686,12 @@ export function mount(root, engine) {
   // gesture, so they enable sound synchronously — before the phase runs unattended and a
   // later auto-start has to chime. The engine itself enforces the Skip guard and the
   // focus-pause policy (ADR-0002): this layer only forwards.
+  // break-flow T7: the auto-start step's pre-start correction — a fresh start like any other
+  // (adjustable-durations AC-06), though the displayed Focus phase is not idle.
+  function prepareAutoStart() {
+    refreshConfigFromStorage(true);
+  }
+
   function handleStartBreak() {
     unlockSound(chimePlayer, setNotice);
     refreshConfigFromStorage();
