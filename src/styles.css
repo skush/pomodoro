@@ -74,9 +74,28 @@ body {
 }
 
 .timer-controls {
-  display: flex;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: 100%;
   margin-top: 1rem;
+}
+
+/* break-flow: the slots sit side-1 | main | side-2, so the main control is centred and a
+   state change never moves a button; DOM (and tab) order stays main, side-1, side-2. */
+.timer-controls [data-slot='side-1'] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.timer-controls [data-slot='main'] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.timer-controls [data-slot='side-2'] {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 /* break-flow: three fixed slots. An empty slot keeps its place (hidden, not removed), so a
@@ -92,8 +111,10 @@ body {
 }
 
 .timer-controls button {
-  padding: 0.6rem 1.25rem;
-  font-size: 1rem;
+  min-height: 3.2rem; /* two label lines in every state, so the row never changes height */
+  padding: 0.4rem 0.5rem;
+  font-size: 0.95rem;
+  line-height: 1.2;
   font-family: inherit;
   color: var(--fg);
   background: var(--control-bg);

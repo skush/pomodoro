@@ -3,7 +3,7 @@
 // index.html in a real headless browser — run `npm run build` first.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { launchBrowser, openApp, MIN } from './helpers.js';
+import { launchBrowser, openApp, MIN, LEGACY_FLOW } from './helpers.js';
 
 let browser;
 before(async () => {
@@ -13,8 +13,9 @@ after(async () => {
   await browser?.close();
 });
 
+// These scenarios predate break-flow, so they run with a waiting break and a pausable Focus.
 async function withApp(options, body) {
-  const app = await openApp(browser, options);
+  const app = await openApp(browser, { ...options, storage: { ...LEGACY_FLOW, ...options.storage } });
   try {
     await body(app);
   } finally {
@@ -29,15 +30,15 @@ const falling = (tones) => tones.every((t, i) => i === 0 || t.frequency < tones[
 
 test('AC-07: no chime on Start, Pause, Resume, Reset, a duration commit or a cycle-length commit', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(2 * MIN);
-    await app.pause().click();
-    await app.start().click(); // Resume
+    await app.pauseFocus().click();
+    await app.resumeFocus().click();
     await app.advance(MIN);
     await app.commit(app.focusField(), '30');
     await app.commit(app.cycleLengthField(), '3');
-    await app.reset().click();
-    await app.start().click();
+    await app.resetFocus().click();
+    await app.startFocus().click();
     await app.advance(MIN);
     assert.deepEqual(await app.tones(), []);
   });
@@ -45,7 +46,7 @@ test('AC-07: no chime on Start, Pause, Resume, Reset, a duration commit or a cyc
 
 test('AC-05/AC-07: exactly one Focus-end chime (rising) per Focus completion, none again on returning to the tab', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     const tones = await app.tones();
     assert.equal(tones.length, FOCUS_NOTES);
@@ -59,7 +60,7 @@ test('AC-05/AC-07: exactly one Focus-end chime (rising) per Focus completion, no
 
 test('§6: on a visible tab the Focus-end chime starts at the deadline and no later than 250 ms after it', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     const deadline = (await app.page.evaluate(() => Date.now())) + 25 * MIN; // the clock is paused: Start's instant
     // Jump to 1 ms before the deadline, then let time RUN so the page's own render ticks fire at their
     // real cadence. fastForward would fire one tick exactly at the target and hide any lag (review R1).
@@ -75,9 +76,9 @@ test('§6: on a visible tab the Focus-end chime starts at the deadline and no la
 
 test('AC-05: a break completion plays the break-end tone (falling), once', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN); // Focus chime
-    await app.start().click();
+    await app.startBreak().click();
     await app.advance(5 * MIN); // Short break completes
     const tones = await app.tones();
     assert.equal(tones.length, FOCUS_NOTES + BREAK_NOTES);
@@ -88,11 +89,11 @@ test('AC-05: a break completion plays the break-end tone (falling), once', async
 test('AC-10: a Focus completion plays one Focus-end chime and credits the Session counter exactly once; a break chimes and leaves it', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
     assert.match(await app.sessionCount(), /: 0$/);
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     assert.equal((await app.tones()).length, FOCUS_NOTES);
     assert.match(await app.sessionCount(), /: 1$/);
-    await app.start().click();
+    await app.startBreak().click();
     await app.advance(5 * MIN); // Short break completes
     assert.equal((await app.tones()).length, FOCUS_NOTES + BREAK_NOTES); // chimed
     assert.match(await app.sessionCount(), /: 1$/); // never changes the counter
@@ -102,7 +103,7 @@ test('AC-10: a Focus completion plays one Focus-end chime and credits the Sessio
 test('AC-10: a Focus that completed before a midnight that has since passed still chimes once but is not credited to the new day', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
     await app.page.clock.setSystemTime(new Date('2026-09-29T23:30:00'));
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(40 * MIN); // true completion 23:55, the page next looks at 00:10 on the 30th
     assert.equal((await app.tones()).length, FOCUS_NOTES);
     assert.equal(await app.phase(), 'Short break');
@@ -112,15 +113,15 @@ test('AC-10: a Focus that completed before a midnight that has since passed stil
 
 test('AC-07: a Pause or Reset an instant before zero means no completion and no chime', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN - 1500);
-    await app.pause().click();
+    await app.pauseFocus().click();
     await app.advance(10 * MIN);
     assert.deepEqual(await app.tones(), []);
-    await app.reset().click();
-    await app.start().click();
+    await app.resetFocus().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN - 1500);
-    await app.reset().click();
+    await app.resetFocus().click();
     await app.advance(10 * MIN);
     assert.deepEqual(await app.tones(), []);
   });
@@ -128,7 +129,7 @@ test('AC-07: a Pause or Reset an instant before zero means no completion and no 
 
 test('AC-06b: after a long jump past the deadline the chime plays exactly once and the next phase waits for Start', async () => {
   await withApp({ audioSpy: {} }, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(3 * 60 * MIN); // device slept for three hours
     assert.equal((await app.tones()).length, FOCUS_NOTES);
     assert.equal(await app.phase(), 'Short break');
@@ -141,7 +142,7 @@ test('AC-06b: after a long jump past the deadline the chime plays exactly once a
 test('AC-11: when sound is suspended the notice shows at Start and at completion, the phase completes as usual, and nothing is chimed later', async () => {
   await withApp({ audioSpy: { state: 'suspended' } }, async (app) => {
     assert.equal(await app.notice().isVisible(), false);
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(1000);
     assert.equal(await app.notice().isVisible(), true); // found at Start, before the phase runs unattended
     await app.advance(25 * MIN);
@@ -155,15 +156,15 @@ test('AC-11: when sound is suspended the notice shows at Start and at completion
 
 test('AC-11: the notice stays until a later Start finds sound working', async () => {
   await withApp({ audioSpy: { state: 'suspended' } }, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(1000);
     assert.equal(await app.notice().isVisible(), true);
     await app.page.evaluate(() => {
       window.__audioState = 'running';
     });
-    await app.pause().click();
+    await app.pauseFocus().click();
     assert.equal(await app.notice().isVisible(), true); // Pause does not clear it
-    await app.start().click(); // Resume finds sound working
+    await app.resumeFocus().click(); // Resume focus finds sound working
     await app.advance(1000);
     assert.equal(await app.notice().isVisible(), false);
   });
@@ -171,7 +172,7 @@ test('AC-11: the notice stays until a later Start finds sound working', async ()
 
 test('AC-11: with no Web Audio at all the page still runs and shows the notice', async () => {
   await withApp({ noAudio: true }, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(1000);
     assert.equal(await app.notice().isVisible(), true);
     await app.advance(25 * MIN);
@@ -187,7 +188,7 @@ test('AC-12: a full run raises no permission prompt or dialog and makes no reque
       if (!r.url().startsWith('blob:')) requests.push(r.url());
     });
     app.page.on('dialog', (d) => dialogs.push(d.type()));
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     assert.deepEqual(requests, []);
     assert.deepEqual(dialogs, []);
@@ -199,7 +200,12 @@ test('AC-12: a full run raises no permission prompt or dialog and makes no reque
 // Real time, no fake clock. The page's own 250 ms render loop never starts (noRenderLoop, applied
 // before the app runs), so ONLY the wake-up worker can bring the page back at the deadline
 // (ADR-0001). The page reports hidden.
-const HIDDEN_ONE_MINUTE = { realClock: true, audioSpy: {}, noRenderLoop: true, storage: { 'adjustable-durations:focus-duration': '1' } };
+const HIDDEN_ONE_MINUTE = {
+  realClock: true,
+  audioSpy: {},
+  noRenderLoop: true,
+  storage: { ...LEGACY_FLOW, 'adjustable-durations:focus-duration': '1' },
+};
 
 async function startHiddenWithClickTimes(app) {
   await app.page.evaluate(() => {
@@ -215,7 +221,7 @@ async function startHiddenWithClickTimes(app) {
       true,
     );
   });
-  await app.start().click();
+  await app.startFocus().click();
   return app.page.evaluate(() => ({ t0: window.__t0, t1: window.__t1 }));
 }
 

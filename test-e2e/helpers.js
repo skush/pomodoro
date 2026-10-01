@@ -12,6 +12,13 @@ export const INDEX_URL = pathToFileURL(path.resolve(HERE, '../index.html')).href
 const START_TIME = new Date('2026-09-29T09:00:00');
 export const MIN = 60 * 1000;
 
+// break-flow: seeds for the two toggles. A scenario written before break-flow expects a break
+// that waits after a Focus ends and a Focus that can be paused, so the pre-existing suites
+// seed this pair (AUTO_START_OFF + PAUSE_ON); the break-flow suite seeds only what it tests.
+export const AUTO_START_OFF = { 'break-flow:auto-start-breaks': 'false' };
+export const PAUSE_ON = { 'break-flow:allow-pausing-focus': 'true' };
+export const LEGACY_FLOW = { ...AUTO_START_OFF, ...PAUSE_ON };
+
 // Uses the system Edge by default (no browser download); set E2E_BROWSER_CHANNEL
 // (e.g. "chrome") or E2E_BROWSER_PATH to point at another Chromium-family browser.
 export async function launchBrowser() {
@@ -147,9 +154,17 @@ export function locators(page) {
       }),
     ringPhase: () => page.locator('.progress-ring').getAttribute('data-phase'),
     sessionCount: () => page.locator('.session-count').textContent(),
-    start: () => page.getByRole('button', { name: 'Start' }),
-    pause: () => page.getByRole('button', { name: 'Pause' }),
-    reset: () => page.getByRole('button', { name: 'Reset' }),
+    // break-flow: every control names its phase (exact, so "Start focus" never matches
+    // "Start break"). A hidden slot has no accessible role, so it is simply not found.
+    startFocus: () => page.getByRole('button', { name: 'Start focus', exact: true }),
+    pauseFocus: () => page.getByRole('button', { name: 'Pause focus', exact: true }),
+    resumeFocus: () => page.getByRole('button', { name: 'Resume focus', exact: true }),
+    resetFocus: () => page.getByRole('button', { name: 'Reset focus', exact: true }),
+    startBreak: () => page.getByRole('button', { name: 'Start break', exact: true }),
+    pauseBreak: () => page.getByRole('button', { name: 'Pause break', exact: true }),
+    resumeBreak: () => page.getByRole('button', { name: 'Resume break', exact: true }),
+    resetBreak: () => page.getByRole('button', { name: 'Reset break', exact: true }),
+    controlSlot: (name) => page.locator('.timer-controls [data-slot="' + name + '"]'),
     focusField: () => field('duration-focus'),
     shortBreakField: () => field('duration-short-break'),
     longBreakField: () => field('duration-long-break'),
