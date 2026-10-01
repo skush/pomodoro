@@ -245,7 +245,7 @@ These lists are complete: a waiting phase shows no pause or reset control. A con
 
 ## 8. Open questions
 
-- [ ] Is 5 s the right On-time completion tolerance, given that a hidden desktop tab already notices a completion within 1 s (sensory-feedback AC-06)? Default now: 5 s. — owner: Tech Lead, due: before `sdd:design`
+- [x] Is 5 s the right On-time completion tolerance, given that a hidden desktop tab already notices a completion within 1 s (sensory-feedback AC-06)? Default now: 5 s. — owner: Tech Lead, due: before `sdd:design` — **resolved 2026-10-01 in `sad.md` §4 decision 6: keep 5 s.**
 - [ ] Is a 3 s Skip guard long enough to absorb the old habit without making a deliberate skip feel blocked? Default now: 3 s; revisit after the first 7 days of use. — owner: PM (sergii.kushnir@gmail.com), due: 7 days after ship
 - [ ] Should a Long break be harder to skip than a Short break (e.g. a longer Skip guard)? Default now: no — same rules for both. — owner: PM (sergii.kushnir@gmail.com), due: before `sdd:tasks`
 - [ ] Should Reset focus ask for confirmation when it would discard a long stretch of Focus? Default now: no — it acts at once, and is kept out of the main position instead. — owner: PM (sergii.kushnir@gmail.com), due: before `sdd:screens`
