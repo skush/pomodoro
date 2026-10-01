@@ -54,10 +54,10 @@ export function createControls(onAction, doc = document) {
     button.setAttribute('data-slot', name);
     button.addEventListener('click', () => {
       const action = button.getAttribute('data-action');
-      // A greyed Start focus is inside the Skip guard: the press does nothing (AC-05). The
-      // engine refuses it too — this just keeps the press from side effects like unlockSound.
-      if (!action || button.getAttribute('aria-disabled') === 'true') return;
-      onAction(action);
+      // Every press is forwarded, the greyed Start focus included: the ENGINE enforces the
+      // Skip guard (ADR-0002), so the press does nothing inside it and works from the exact
+      // moment the guard ends — even when the greyed look trails by one render tick (ADR-0003).
+      if (action) onAction(action);
     });
     return button;
   });

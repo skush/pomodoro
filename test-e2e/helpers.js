@@ -115,11 +115,14 @@ export async function launchPersistent(userDataDir) {
 // oscillator it is asked to start, on `window.__tones` as {frequency, at, title} where `at` is the
 // page's Date.now() when the oscillator was scheduled and `title` is document.title at that
 // moment (so a test can check the title changed first). `state` is what resume() leaves the
-// context in ('running' or 'suspended').
+// context in ('running' or 'suspended'). Every context created is kept on `window.__audioContexts`,
+// so a test can flip one to 'suspended' after the Start press (sound lost mid-phase).
 export function installAudioSpy({ state = 'running' } = {}) {
   window.__tones = [];
+  window.__audioContexts = [];
   window.AudioContext = class FakeAudioContext {
     constructor() {
+      window.__audioContexts.push(this);
       this.state = 'suspended';
       this.currentTime = 0;
       this.destination = {};

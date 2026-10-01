@@ -198,9 +198,20 @@ describe('createControls (AC-10)', () => {
     assert.deepEqual(actions, ['startFocus', 'pauseBreak', 'resetBreak']);
   });
 
-  test('a click on the greyed Start focus does nothing (AC-05)', () => {
+  // AC-05 is enforced by the engine (ADR-0002, unit-tested there): the control only forwards, so
+  // a press right after the guard ends is never dropped while the greyed look trails a tick.
+  test('a click on the greyed Start focus is still forwarded — the engine, not the control, enforces the guard (AC-05)', () => {
     const { controls, phaseEl, actions, main } = build();
     controls.update(controlLayout(snapshot({ phase: PHASES.SHORT_BREAK, state: 'running' }), FOCUS_START + 1000), phaseEl);
+    assert.equal(main.attrs['aria-disabled'], 'true');
+    main.click();
+    assert.deepEqual(actions, ['startFocus']);
+  });
+
+  test('a click on a hidden, empty slot reports nothing', () => {
+    const { controls, phaseEl, actions, main } = build();
+    controls.update(controlLayout(snapshot({ phase: PHASES.FOCUS, state: 'running' }), FOCUS_START + 1000), phaseEl);
+    assert.equal(main.hidden, true);
     main.click();
     assert.deepEqual(actions, []);
   });
