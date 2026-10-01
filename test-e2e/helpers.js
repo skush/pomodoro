@@ -39,7 +39,8 @@ export async function launchBrowser() {
 // `storage` is seeded into localStorage ONCE, before the app's scripts run — a
 // sessionStorage marker stops the init script re-seeding on reload. With
 // `blockDurationWrites`, every localStorage write to an adjustable-durations key
-// throws (a quota/private-mode failure), while all other keys still work.
+// throws (a quota/private-mode failure), while all other keys still work; `blockBreakFlowWrites`
+// does the same for the break-flow toggle keys.
 // sensory-feedback: `viewport` and `reducedMotion` shape the context; `noAudio` removes the
 // Web Audio API before the page runs (sound unavailable); `audioSpy` replaces AudioContext
 // with a recording fake (see installAudioSpy) so a test can observe tones without hearing them.
@@ -49,7 +50,7 @@ export async function launchBrowser() {
 // the wake-up worker as the only thing that can bring a hidden page back at the deadline.
 export async function openApp(
   browser,
-  { storage = {}, blockDurationWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null, realClock = false, noRenderLoop = false, deadWorker = false } = {},
+  { storage = {}, blockDurationWrites = false, blockBreakFlowWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null, realClock = false, noRenderLoop = false, deadWorker = false } = {},
 ) {
   const context = await browser.newContext({ viewport, reducedMotion });
   if (noAudio) {
@@ -83,6 +84,17 @@ export async function openApp(
       const realSetItem = Storage.prototype.setItem;
       Storage.prototype.setItem = function setItem(key, value) {
         if (String(key).startsWith('adjustable-durations:')) throw new Error('QuotaExceededError');
+        return realSetItem.call(this, key, value);
+      };
+    });
+  }
+  if (blockBreakFlowWrites) {
+    // break-flow AC-09: every write to a break-flow toggle key throws, as a refused save would.
+    await context.addInitScript(() => {
+      const { Storage } = window;
+      const realSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function setItem(key, value) {
+        if (String(key).startsWith('break-flow:')) throw new Error('QuotaExceededError');
         return realSetItem.call(this, key, value);
       };
     });

@@ -1021,6 +1021,19 @@ describe('break-flow engine (T2)', () => {
     assert.equal(snap.focusCount, 1);
   });
 
+  test('startFocus pressed just after the break really ended starts that Focus (AC-04)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    const press = FOCUS + 5 * MIN + 1; // 1 ms past the break deadline, before any render tick settled it
+    engine.startFocus(press);
+    const snap = engine.getSnapshot(press);
+    assert.equal(snap.phase, PHASES.FOCUS);
+    assert.equal(snap.running, true);
+    assert.equal(snap.remainingMs, FOCUS);
+    assert.equal(snap.startedAt, press);
+  });
+
   test('startFocus is a no-op in any Focus state', () => {
     const engine = createTimerEngine();
     engine.startFocus(0); // waiting Focus

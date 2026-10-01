@@ -61,6 +61,8 @@ function layout(main, side = [], mainGreyed = false) {
 // The arrangement keeps the pause toggle always at side[0] and Reset break always at
 // side[1] (a pause/resume pair therefore shares one slot, AC-11), so after Reset break
 // the Start focus beside Start break sits at side[0] — never where Reset break was.
+// Reset focus always sits in side[1], never side[0], so it never shares a slot with the
+// Start focus of a waiting break: a double-click cannot start a Focus and then discard it.
 // A paused Focus keeps Resume + Reset even if the policy has since gone off: a phase in
 // progress is never altered by a setting.
 export function controlLayout(snapshot, now) {
@@ -70,8 +72,8 @@ export function controlLayout(snapshot, now) {
 
   if (phase === 'focus' || phase === undefined) {
     if (waiting) return layout('startFocus');
-    if (running) return layout(snapshot.allowPausingFocus ? 'pauseFocus' : null, ['resetFocus']);
-    return layout('resumeFocus', ['resetFocus']);
+    if (running) return layout(snapshot.allowPausingFocus ? 'pauseFocus' : null, [null, 'resetFocus']);
+    return layout('resumeFocus', [null, 'resetFocus']);
   }
 
   if (waiting) return layout('startBreak', ['startFocus']);

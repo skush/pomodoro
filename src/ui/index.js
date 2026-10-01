@@ -267,9 +267,11 @@ function createNumericField({ id, labelText, rangeMessage, validate, initialValu
     }
   });
 
+  // A field the User is typing in keeps its text: a correction that runs without the User
+  // (the auto-start step) refreshes only the value a rejected commit reverts to.
   function setValue(value) {
     lastValid = value;
-    input.value = String(value);
+    if (document.activeElement !== input) input.value = String(value);
   }
 
   wrapper.append(fieldLabel, input, message);

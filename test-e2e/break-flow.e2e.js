@@ -279,9 +279,9 @@ test('AC-10: every control names its phase, and only the listed controls appear 
   await withApp({ storage: PAUSE_ON }, async (app) => {
     assert.deepEqual(await visibleControls(app), ['Start focus']); // Focus waiting
     await app.startFocus().click();
-    assert.deepEqual(await visibleControls(app), ['Reset focus', 'Pause focus']); // Focus running, pausing on
+    assert.deepEqual(await visibleControls(app), ['Pause focus', 'Reset focus']); // Focus running, pausing on
     await app.pauseFocus().click();
-    assert.deepEqual(await visibleControls(app), ['Reset focus', 'Resume focus']);
+    assert.deepEqual(await visibleControls(app), ['Resume focus', 'Reset focus']);
     await app.resumeFocus().click();
     await app.advance(25 * MIN);
     assert.deepEqual(await visibleControls(app), ['Pause break', 'Start focus', 'Reset break']); // break running
@@ -310,14 +310,14 @@ test('AC-15: with Allow pausing focus off (the default) a running Focus has no p
 test('AC-16/AC-17: Allow pausing focus on shows Pause focus; turning it off mid-Focus removes it at once and the Focus keeps running', async () => {
   await withApp({ storage: PAUSE_ON }, async (app) => {
     await app.startFocus().click();
-    assert.deepEqual(await visibleControls(app), ['Reset focus', 'Pause focus']);
+    assert.deepEqual(await visibleControls(app), ['Pause focus', 'Reset focus']);
     await app.page.locator('#allow-pausing-focus').uncheck();
     assert.deepEqual(await visibleControls(app), ['Reset focus']);
     await app.advance(1000);
     assert.equal(await app.countdown(), '24:59'); // never altered the running phase
     assert.equal((await app.storage())['break-flow:allow-pausing-focus'], 'false');
     await app.page.locator('#allow-pausing-focus').check();
-    assert.deepEqual(await visibleControls(app), ['Reset focus', 'Pause focus']);
+    assert.deepEqual(await visibleControls(app), ['Pause focus', 'Reset focus']);
   });
 });
 
@@ -452,5 +452,47 @@ test('AC-13: with no Web Audio the page still auto-starts the break and shows th
     assert.equal(await app.phase(), 'Short break');
     assert.equal(await app.countdown(), '4:59');
     assert.equal(await app.notice().isVisible(), true);
+  });
+});
+
+// ---- review round 1 fixes ----
+
+test('review #2 (AC-09): a refused save of a toggle still applies for this page load, with no error shown', async () => {
+  await withApp({ audioSpy: {}, blockBreakFlowWrites: true }, async (app) => {
+    const errors = [];
+    app.page.on('pageerror', (error) => errors.push(error));
+    await app.page.locator('#auto-start-breaks').uncheck(); // the save is refused
+    assert.equal(await app.page.locator('#auto-start-breaks').isChecked(), false);
+    await runFocusToEnd(app);
+    assert.equal(await app.countdown(), '5:00'); // the choice applied: the break waits
+    assert.deepEqual(await visibleControls(app), ['Start focus', 'Start break']);
+    assert.equal(await app.notice().isVisible(), false);
+    assert.deepEqual(errors, []);
+    assert.deepEqual(Object.keys(await app.storage()).filter((k) => k.startsWith('break-flow:')), []); // nothing was saved
+  });
+});
+
+test('review #3 (AC-14/AC-11): a break auto-starting does not wipe text being typed in a duration field', async () => {
+  await withApp({}, async (app) => {
+    await app.startFocus().click();
+    await app.advance(24 * MIN);
+    await app.shortBreakField().click();
+    await app.shortBreakField().fill('7'); // typed, not yet committed
+    await app.advance(MIN + 1000); // the Focus ends and the break auto-starts
+    assert.equal(await app.phase(), 'Short break');
+    assert.equal(await app.shortBreakField().inputValue(), '7');
+    await app.shortBreakField().press('Enter'); // the User's own commit still lands
+    assert.equal(await app.shortBreakField().inputValue(), '7');
+    assert.equal((await app.storage())['adjustable-durations:short-break-duration'], '7');
+  });
+});
+
+test('review #4 (spec §2 goal 4): a double-click on Start focus of a waiting break cannot start and then discard the Focus', async () => {
+  await withApp({ storage: AUTO_START_OFF }, async (app) => {
+    await runFocusToEnd(app);
+    assert.deepEqual(await visibleControls(app), ['Start focus', 'Start break']);
+    await app.startFocus().dblclick();
+    assert.equal(await app.phase(), 'Focus');
+    assert.deepEqual(await visibleControls(app), ['Reset focus']); // still running — the second click reset nothing
   });
 });

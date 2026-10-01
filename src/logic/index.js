@@ -132,10 +132,17 @@ export function createTimerEngine() {
   // break-flow AC-04/AC-05: ends a break — running, paused or waiting — and starts the next
   // Focus at the current Configured duration, with no completion record and no focusCount
   // change (a Skipped break adds and removes nothing, AC-04b). A no-op inside the Skip guard
-  // and in any Focus state (Start focus on a waiting Focus goes through start()).
+  // and in any Focus state (Start focus on a waiting Focus goes through start(); a press just
+  // after a break's real end starts the Focus that settle() made waiting).
   function startFocus(now) {
+    const wasBreak = phase !== PHASES.FOCUS;
     settle(now);
-    if (phase === PHASES.FOCUS) return;
+    if (phase === PHASES.FOCUS) {
+      // The break really ended between the last render and this press: the press meant
+      // "start Focus", so the Focus that settle() just made waiting is started now.
+      if (wasBreak && !running) start(now);
+      return;
+    }
     if (isSkipGuardActive({ phase, startedAt }, now)) return;
     phase = PHASES.FOCUS;
     phaseFullMs = configuredMs(phase);

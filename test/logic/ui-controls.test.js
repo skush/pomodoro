@@ -173,8 +173,9 @@ describe('createControls (AC-10)', () => {
     controls.update(controlLayout(snapshot({ phase: PHASES.FOCUS, state: 'running' }), FOCUS_START + 10_000), phaseEl);
     assert.equal(main.hidden, true);
     assert.equal(main.getAttribute('data-action'), null);
-    assert.equal(side1.textContent, 'Reset focus');
-    assert.equal(side2.hidden, true);
+    assert.equal(side1.hidden, true);
+    assert.equal(side1.getAttribute('data-action'), null);
+    assert.equal(side2.textContent, 'Reset focus');
     for (const btn of [main, side1, side2]) assert.doesNotMatch(btn.textContent, /^(Start|Pause|Resume|Reset)$/);
   });
 

@@ -120,10 +120,10 @@ test('controlLayout: the AC-10 table, every phase × run-state × guard × polic
     cases.push([
       { phase: PHASES.FOCUS, state: 'running', startedAt: T0, allow },
       inGuard,
-      L(allow ? 'pauseFocus' : null, ['resetFocus']),
+      L(allow ? 'pauseFocus' : null, [null, 'resetFocus']),
     ]);
     // A paused Focus stays paused (resume + reset) even if the policy has since gone off.
-    cases.push([{ phase: PHASES.FOCUS, state: 'paused', startedAt: T0, allow }, outOfGuard, L('resumeFocus', ['resetFocus'])]);
+    cases.push([{ phase: PHASES.FOCUS, state: 'paused', startedAt: T0, allow }, outOfGuard, L('resumeFocus', [null, 'resetFocus'])]);
   }
   for (const phase of [PHASES.SHORT_BREAK, PHASES.LONG_BREAK]) {
     for (const allow of [false, true]) {

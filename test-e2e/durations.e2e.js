@@ -279,9 +279,11 @@ test('NFR display width: no control shifts across 1–180 minutes or the 100:00 
     const slotsAt101 = await slotBoxes();
     assert.equal(await app.countdown(), '101:00');
     await app.startFocus().click();
+    const slotsRunning101 = await slotBoxes(); // the running state's slots, before the crossing
     await app.advance(MIN + 30 * 1000); // 101:00 → 99:30, across the 100 → 99 crossing
     assert.equal(await app.countdown(), '99:30');
     assert.deepEqual(await boxes(), at101);
+    assert.deepEqual(await slotBoxes(), slotsRunning101); // no control shifts across the crossing
     await app.resetFocus().click();
     await app.commit(app.focusField(), '180');
     const at180 = await boxes();
