@@ -1,12 +1,12 @@
 // e2e-through-UI tests for adjustable-durations (T11): every flow is driven through the
 // real rendered page — typing into the fields, pressing Enter / blurring, clicking
-// Start/Pause/Reset — against the BUILT index.html, with a controllable fake clock.
+// the phase-labelled controls — against the BUILT index.html, with a controllable fake clock.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { launchBrowser, openApp, launchPersistent, locators, MIN, INDEX_URL } from './helpers.js';
+import { launchBrowser, openApp, launchPersistent, locators, MIN, INDEX_URL, LEGACY_FLOW } from './helpers.js';
 
 const FOCUS_KEY = 'adjustable-durations:focus-duration';
 const SHORT_KEY = 'adjustable-durations:short-break-duration';
@@ -21,9 +21,10 @@ after(async () => {
   await browser?.close();
 });
 
-// Runs `body(app)` against a fresh, isolated page and always closes its context.
+// Runs `body(app)` against a fresh, isolated page and always closes its context. These
+// scenarios predate break-flow, so they run with a waiting break and a pausable Focus.
 async function withApp(options, body) {
-  const app = await openApp(browser, options);
+  const app = await openApp(browser, { ...options, storage: { ...LEGACY_FLOW, ...options.storage } });
   try {
     await body(app);
   } finally {
@@ -34,7 +35,7 @@ async function withApp(options, body) {
 test('AC-01: a committed Focus duration is what the next fresh Focus runs for', async () => {
   await withApp({}, async (app) => {
     await app.commit(app.focusField(), '50');
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(1000);
     assert.equal(await app.countdown(), '49:59');
     assert.equal((await app.storage())[FOCUS_KEY], '50');
@@ -83,29 +84,29 @@ test('AC-03: committing while idle updates the idle countdown immediately', asyn
 
 test('AC-04: committing while running leaves the countdown untouched; AC-04b: Reset then shows the new duration', async () => {
   await withApp({}, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(MIN);
     assert.equal(await app.countdown(), '24:00');
     await app.commit(app.focusField(), '50');
     assert.equal(await app.countdown(), '24:00');
     await app.advance(1000);
     assert.equal(await app.countdown(), '23:59');
-    await app.reset().click();
+    await app.resetFocus().click();
     assert.equal(await app.countdown(), '50:00'); // AC-04b
   });
 });
 
 test('AC-05: committing while paused keeps the frozen time; resuming counts down from it', async () => {
   await withApp({}, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(7 * MIN);
-    await app.pause().click();
+    await app.pauseFocus().click();
     assert.equal(await app.countdown(), '18:00');
     await app.commit(app.focusField(), '90');
     assert.equal(await app.countdown(), '18:00');
     await app.advance(5 * MIN); // paused: nothing moves
     assert.equal(await app.countdown(), '18:00');
-    await app.start().click();
+    await app.resumeFocus().click();
     await app.advance(1000);
     assert.equal(await app.countdown(), '17:59');
   });
@@ -161,13 +162,13 @@ test('AC-10: a committed cycle length governs the next Long-break decision', asy
   await withApp({}, async (app) => {
     await app.commit(app.cycleLengthField(), '2');
     assert.equal((await app.storage())[CYCLE_KEY], '2');
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     assert.equal(await app.phase(), 'Short break');
-    await app.start().click();
+    await app.startBreak().click();
     await app.advance(5 * MIN);
     assert.equal(await app.phase(), 'Focus');
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     assert.equal(await app.phase(), 'Long break'); // 2nd Focus, not the classic 4th
   });
@@ -198,15 +199,15 @@ test('AC-14: a committed cycle length is pre-filled after a reload; the session 
 test('AC-13: lowering the cycle length mid-cycle changes nothing until the next Focus completes, then yields a Long break', async () => {
   await withApp({}, async (app) => {
     for (let i = 0; i < 2; i += 1) {
-      await app.start().click();
+      await app.startFocus().click();
       await app.advance(25 * MIN); // Focus done
-      await app.start().click();
+      await app.startBreak().click();
       await app.advance(5 * MIN); // Short break done
     }
     assert.equal(await app.phase(), 'Focus');
     await app.commit(app.cycleLengthField(), '2'); // 2 already reached
     assert.equal(await app.phase(), 'Focus'); // no retroactive Long break
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     assert.equal(await app.phase(), 'Long break');
   });
@@ -268,19 +269,28 @@ test('sensory-feedback spike: an inline Blob worker starts from file:// and post
 
 test('NFR display width: no control shifts across 1–180 minutes or the 100:00 → 99:59 crossing', async () => {
   await withApp({ storage: { [FOCUS_KEY]: '101' } }, async (app) => {
+    // break-flow: the controls are three fixed slots whose labels change with the state, so the
+    // boxes compared across states are the slot row and the fields; the slots themselves are
+    // compared between the waiting states only.
     const boxes = async () =>
-      Promise.all([app.start(), app.pause(), app.reset(), app.focusField(), app.cycleLengthField()].map((l) => l.boundingBox()));
+      Promise.all([app.page.locator('.timer-controls'), app.focusField(), app.cycleLengthField()].map((l) => l.boundingBox()));
+    const slotBoxes = async () => Promise.all(['main', 'side-1', 'side-2'].map((n) => app.controlSlot(n).boundingBox()));
     const at101 = await boxes();
+    const slotsAt101 = await slotBoxes();
     assert.equal(await app.countdown(), '101:00');
-    await app.start().click();
+    await app.startFocus().click();
+    const slotsRunning101 = await slotBoxes(); // the running state's slots, before the crossing
     await app.advance(MIN + 30 * 1000); // 101:00 → 99:30, across the 100 → 99 crossing
     assert.equal(await app.countdown(), '99:30');
     assert.deepEqual(await boxes(), at101);
-    await app.reset().click();
+    assert.deepEqual(await slotBoxes(), slotsRunning101); // no control shifts across the crossing
+    await app.resetFocus().click();
     await app.commit(app.focusField(), '180');
     const at180 = await boxes();
+    assert.deepEqual(await slotBoxes(), slotsAt101); // same waiting state, three-digit countdown
     await app.commit(app.focusField(), '1');
     assert.deepEqual(await boxes(), at180);
+    assert.deepEqual(await slotBoxes(), slotsAt101);
   });
 });
 
@@ -288,7 +298,7 @@ test('review fix #1 (AC-01/AC-03): with storage writes failing, a committed dura
   await withApp({ blockDurationWrites: true }, async (app) => {
     await app.commit(app.focusField(), '50');
     assert.equal(await app.countdown(), '50:00');
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(1000);
     assert.equal(await app.countdown(), '49:59');
     assert.equal(await app.focusField().inputValue(), '50');
@@ -297,12 +307,12 @@ test('review fix #1 (AC-01/AC-03): with storage writes failing, a committed dura
 
 test('review fix #3 (AC-06/AC-08): Resume is not a fresh start — a stored change is neither adopted nor written', async () => {
   await withApp({}, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(7 * MIN);
-    await app.pause().click();
+    await app.pauseFocus().click();
     await app.page.evaluate((key) => window.localStorage.setItem(key, '90'), FOCUS_KEY); // foreign, valid
     await app.page.evaluate((key) => window.localStorage.setItem(key, 'junk'), CYCLE_KEY); // foreign, invalid
-    await app.start().click(); // Resume
+    await app.resumeFocus().click();
     await app.advance(1000);
     assert.equal(await app.countdown(), '17:59');
     assert.equal(await app.focusField().inputValue(), '25');

@@ -3,7 +3,7 @@
 // drives the BUILT root index.html in a real headless browser — run `npm run build` first.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { launchBrowser, openApp, MIN } from './helpers.js';
+import { launchBrowser, openApp, MIN, LEGACY_FLOW } from './helpers.js';
 
 let browser;
 before(async () => {
@@ -13,8 +13,9 @@ after(async () => {
   await browser?.close();
 });
 
+// These scenarios predate break-flow, so they run with a waiting break and a pausable Focus.
 async function withApp(options, body) {
-  const app = await openApp(browser, options);
+  const app = await openApp(browser, { ...options, storage: { ...LEGACY_FLOW, ...options.storage } });
   try {
     await body(app);
   } finally {
@@ -30,7 +31,7 @@ const shownSeconds = (text) => {
 test('AC-01/§6: the ring agrees with the on-page countdown within 1 s at every sampled update', async () => {
   await withApp({}, async (app) => {
     assert.equal(await app.ringFraction(), 1); // full before Start
-    await app.start().click();
+    await app.startFocus().click();
     for (const step of [1000, 60_000, 11 * MIN + 345, 12 * MIN, 30_000]) {
       await app.advance(step);
       const seconds = shownSeconds(await app.countdown());
@@ -43,7 +44,7 @@ test('AC-01/§6: the ring agrees with the on-page countdown within 1 s at every 
 test('AC-01/AC-02: the ring is down to at most 1 s just before the Phase completion, and the next phase loads full, in its own colour', async () => {
   await withApp({}, async (app) => {
     assert.equal(await app.ringPhase(), 'focus');
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN - 500); // half a second before the deadline
     assert.equal(await app.phase(), 'Focus');
     // The ring rounds up to whole seconds, so its last frame shows 1 s left (the §6 tolerance), never more.
@@ -61,13 +62,13 @@ test('AC-03: the rendered ring stroke differs between Focus, Short break and Lon
     const stroke = () => app.page.evaluate(() => getComputedStyle(document.querySelector('.ring-arc')).stroke);
     await app.commit(app.cycleLengthField(), '2'); // Focus, Short break, Focus, then the Long break
     const focus = await stroke();
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     assert.equal(await app.ringPhase(), 'short_break');
     const shortBreak = await stroke();
-    await app.start().click();
+    await app.startBreak().click();
     await app.advance(5 * MIN);
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     assert.equal(await app.ringPhase(), 'long_break');
     const longBreak = await stroke();
@@ -78,17 +79,17 @@ test('AC-03: the rendered ring stroke differs between Focus, Short break and Lon
 test('AC-02/AC-04: the tab title shows running, paused and ready, and the ring freezes on pause and refills on Reset', async () => {
   await withApp({}, async (app) => {
     assert.equal(await app.title(), 'Ready · 25 min · Focus');
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(5 * MIN);
     assert.equal(await app.title(), '20 min · Focus'); // 19:59-ish rounds up
-    await app.pause().click();
+    await app.pauseFocus().click();
     const frozenTitle = await app.title();
     const frozenRing = await app.ringFraction();
     assert.match(frozenTitle, /^Paused · \d+ min · Focus$/);
     await app.advance(3 * MIN);
     assert.equal(await app.title(), frozenTitle);
     assert.equal(await app.ringFraction(), frozenRing);
-    await app.reset().click();
+    await app.resetFocus().click();
     assert.equal(await app.title(), 'Ready · 25 min · Focus');
     assert.equal(await app.ringFraction(), 1);
   });
@@ -96,7 +97,7 @@ test('AC-02/AC-04: the tab title shows running, paused and ready, and the ring f
 
 test('AC-04: the three phases are named in the title', async () => {
   await withApp({}, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(25 * MIN);
     assert.equal(await app.title(), 'Ready · 5 min · Short break');
   });
@@ -104,7 +105,7 @@ test('AC-04: the three phases are named in the title', async () => {
 
 test('AC-08: a mid-phase duration commit leaves the ring in step with the unchanged countdown', async () => {
   await withApp({}, async (app) => {
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(5 * MIN);
     await app.commit(app.focusField(), '10'); // committed for the NEXT fresh Focus
     const seconds = shownSeconds(await app.countdown());
@@ -128,7 +129,7 @@ test('AC-13: at 320 CSS px with a three-digit countdown, a validation message an
     async (app) => {
       assert.equal(await app.countdown(), '180:00');
       await app.commit(app.focusField(), '500'); // out of range -> inline validation message
-      await app.start().click(); // no Web Audio -> sound-unavailable notice
+      await app.startFocus().click(); // no Web Audio -> sound-unavailable notice
       assert.equal(await app.notice().isVisible(), true);
       assert.equal(await app.message('duration-focus').isVisible(), true);
       const metrics = await app.page.evaluate(() => {
@@ -155,7 +156,7 @@ test('reduced motion: 0 ring transitions, and the ring changes at most once per 
   await withApp({ reducedMotion: 'reduce' }, async (app) => {
     const duration = await app.page.evaluate(() => getComputedStyle(document.querySelector('.ring-arc')).transitionDuration);
     assert.match(duration, /^0s(, 0s)*$/);
-    await app.start().click();
+    await app.startFocus().click();
     await app.advance(1000);
     const a = await app.ringFraction();
     await app.advance(400); // still inside the same displayed second

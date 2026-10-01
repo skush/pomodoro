@@ -2,7 +2,7 @@
 status: Draft
 owner: "sergii.kushnir@gmail.com"
 reviewers: ["Tech Lead"]
-updated_at: "2026-09-30"
+updated_at: "2026-10-01"
 feature_size: "S"
 target_surfaces: [web-frontend]  # filled in §4 — subset of: backend-service | web-frontend | mobile-app | desktop-app | cli | worker | library-sdk. Read (never re-derived) by api/sequences/tasks/plan-tests/review → _shared/surfaces.md
 ---
@@ -16,7 +16,7 @@ target_surfaces: [web-frontend]  # filled in §4 — subset of: backend-service 
 ## 1. Introduction and goals
 
 **Intent.** sensory-feedback adds the eyes-off cue layer the timer has lacked since core-timer. A
-Completion chime with a distinct Focus-end tone and break-end tone plays at every Phase completion,
+Completion chime with a distinct Focus-end tone and break-end tone plays at every Phase completion (not for a stale one, AC-06b),
 including while the tab is in the background of an awake desktop browser. A Progress ring, coloured
 per phase type, depletes against the length the phase started with. The Tab title mirror shows the
 remaining whole minutes, the phase, and whether the timer is running, paused or waiting for Start.
@@ -33,7 +33,8 @@ guarantee as it is.
    already shows the next phase waiting for Start when it does.
 2. **Exactly-once, completion-only chime**: one chime per Phase completion, never on
    Start/Pause/Resume/Reset/duration commit, never repeated on return to the tab, and a
-   sound-unavailable notice in its place (never a delayed chime) when sound cannot play.
+   sound-unavailable notice in its place (never a delayed chime) when sound cannot play. Neither plays for a
+   stale completion (more than 2 minutes late, AC-06b).
 3. **Accessible, consistent visual cues**: the ring agrees with the countdown within 1 s, it is
    measured against the phase's own starting length, and every text and non-text colour pair meets
    WCAG AA. Reduced motion and 320 CSS px layouts are honoured.
@@ -207,7 +208,7 @@ out of sight. There are no network edges.
    Start/Resume press, and checked at unlock and at each completion.** The context is created on
    the first Start and `resume()`d on every Start/Resume, which is the User's gesture, so there's
    no permission prompt (AC-12). If it is missing or not `running` right after that, or at a
-   completion, the sound-unavailable notice shows and **no chime is queued for later** (AC-11,
+   completion that is not stale (AC-06b), the sound-unavailable notice shows and **no chime is queued for later** (AC-11,
    AC-06b). A later Start/Resume that finds it `running` hides the notice. Low blast radius,
    contained in `src/ui/audio.js`, so it stays inline.
 6. **Cue rules as pure data and functions in `src/logic/`, rendering in `src/ui/`.** Tones are note
@@ -361,7 +362,7 @@ sequenceDiagram
 **Critical flow 3: After a device sleep, lock or frozen tab (AC-06b)** — no separate diagram. It is
 Flow 1's "deadline has passed" branch entered from whichever wake source runs first once the page
 runs again: the overdue worker timeout, the throttled render tick or `visibilitychange`. The
-one-shot `justCompleted` makes that single chime (or the notice) happen exactly once. The next
+one-shot `justCompleted` makes that single chime (or the notice) happen exactly once. A completion noticed more than 2 minutes after its true moment (`STALE_COMPLETION_MS`, owner decision 2026-10-01) is stale: the UI plays neither the chime nor the notice, and the completion is still credited. The next
 phase is idle, so nothing further completes unattended. `sequences` expands this and covers every
 §5 AC.
 
@@ -386,7 +387,9 @@ sequenceDiagram
     Engine-->>UI: next phase idle, justCompleted with phase and true moment
     UI->>UI: set tab title to the next phase, ready
     UI->>UI: ring full in the next phase colour
-    alt sound available (context running)
+    alt completion noticed more than 2 minutes after its true moment (stale)
+        UI->>UI: no chime, no notice (owner decision 2026-10-01)
+    else sound available (context running)
         UI->>Audio: play the tone for the completed phase, once
         Audio-->>User: Completion chime, late
     else sound blocked or suspended
@@ -394,7 +397,7 @@ sequenceDiagram
     end
     UI->>UI: credit the Session counter from justCompletedFocusAt (session-tracking, unchanged)
     Note over UI,Worker: a second wake source finds justCompleted null, so no second chime
-    Note over UI,Engine: Postcondition: one chime or one notice, the next phase idle so nothing can complete unattended
+    Note over UI,Engine: Postcondition: one chime or one notice (neither for a stale completion), the next phase idle so nothing can complete unattended
 ```
 
 ### Flow 4: Render tick, ring and Tab title mirror (AC-01, AC-02, AC-03, AC-04)
@@ -533,7 +536,7 @@ deadline), [core-timer ADR-0002](../core-timer/adr/0002-structural-encapsulation
 - **When:** the User presses Start/Pause/Resume/Reset or commits a duration; a phase completes; the
   User returns to the tab; the device slept past the deadline; sound is unavailable.
 - **Then:** no chime on any control or commit, and exactly one per Phase completion, never repeated
-  (AC-07). After a sleep, exactly one chime at the moment the page runs again, and none after
+  (AC-07). After a sleep, one chime at the moment the page runs again if that is within 2 minutes of the completion, none if later, and none after
   (AC-06b). Each tone "≤ 2 s, played once, never repeating"; "peak output gain of each tone ≤ 0.3 of
   full scale"; "0 network requests, 0 audio files shipped" (`spec.md` §6, verbatim). When sound
   cannot play, the notice appears and nothing is held back (AC-11).

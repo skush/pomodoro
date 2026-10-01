@@ -12,6 +12,13 @@ export const INDEX_URL = pathToFileURL(path.resolve(HERE, '../index.html')).href
 const START_TIME = new Date('2026-09-29T09:00:00');
 export const MIN = 60 * 1000;
 
+// break-flow: seeds for the two toggles. A scenario written before break-flow expects a break
+// that waits after a Focus ends and a Focus that can be paused, so the pre-existing suites
+// seed this pair (AUTO_START_OFF + PAUSE_ON); the break-flow suite seeds only what it tests.
+export const AUTO_START_OFF = { 'break-flow:auto-start-breaks': 'false' };
+export const PAUSE_ON = { 'break-flow:allow-pausing-focus': 'true' };
+export const LEGACY_FLOW = { ...AUTO_START_OFF, ...PAUSE_ON };
+
 // Uses the system Edge by default (no browser download); set E2E_BROWSER_CHANNEL
 // (e.g. "chrome") or E2E_BROWSER_PATH to point at another Chromium-family browser.
 export async function launchBrowser() {
@@ -32,7 +39,8 @@ export async function launchBrowser() {
 // `storage` is seeded into localStorage ONCE, before the app's scripts run — a
 // sessionStorage marker stops the init script re-seeding on reload. With
 // `blockDurationWrites`, every localStorage write to an adjustable-durations key
-// throws (a quota/private-mode failure), while all other keys still work.
+// throws (a quota/private-mode failure), while all other keys still work; `blockBreakFlowWrites`
+// does the same for the break-flow toggle keys.
 // sensory-feedback: `viewport` and `reducedMotion` shape the context; `noAudio` removes the
 // Web Audio API before the page runs (sound unavailable); `audioSpy` replaces AudioContext
 // with a recording fake (see installAudioSpy) so a test can observe tones without hearing them.
@@ -42,7 +50,7 @@ export async function launchBrowser() {
 // the wake-up worker as the only thing that can bring a hidden page back at the deadline.
 export async function openApp(
   browser,
-  { storage = {}, blockDurationWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null, realClock = false, noRenderLoop = false, deadWorker = false } = {},
+  { storage = {}, blockDurationWrites = false, blockBreakFlowWrites = false, viewport = { width: 900, height: 900 }, reducedMotion = 'no-preference', noAudio = false, audioSpy = null, realClock = false, noRenderLoop = false, deadWorker = false } = {},
 ) {
   const context = await browser.newContext({ viewport, reducedMotion });
   if (noAudio) {
@@ -80,6 +88,17 @@ export async function openApp(
       };
     });
   }
+  if (blockBreakFlowWrites) {
+    // break-flow AC-09: every write to a break-flow toggle key throws, as a refused save would.
+    await context.addInitScript(() => {
+      const { Storage } = window;
+      const realSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function setItem(key, value) {
+        if (String(key).startsWith('break-flow:')) throw new Error('QuotaExceededError');
+        return realSetItem.call(this, key, value);
+      };
+    });
+  }
   const page = await context.newPage();
   if (realClock) {
     // sensory-feedback: real time flows (the hidden-tab timing test); no fake clock.
@@ -108,11 +127,14 @@ export async function launchPersistent(userDataDir) {
 // oscillator it is asked to start, on `window.__tones` as {frequency, at, title} where `at` is the
 // page's Date.now() when the oscillator was scheduled and `title` is document.title at that
 // moment (so a test can check the title changed first). `state` is what resume() leaves the
-// context in ('running' or 'suspended').
+// context in ('running' or 'suspended'). Every context created is kept on `window.__audioContexts`,
+// so a test can flip one to 'suspended' after the Start press (sound lost mid-phase).
 export function installAudioSpy({ state = 'running' } = {}) {
   window.__tones = [];
+  window.__audioContexts = [];
   window.AudioContext = class FakeAudioContext {
     constructor() {
+      window.__audioContexts.push(this);
       this.state = 'suspended';
       this.currentTime = 0;
       this.destination = {};
@@ -147,9 +169,17 @@ export function locators(page) {
       }),
     ringPhase: () => page.locator('.progress-ring').getAttribute('data-phase'),
     sessionCount: () => page.locator('.session-count').textContent(),
-    start: () => page.getByRole('button', { name: 'Start' }),
-    pause: () => page.getByRole('button', { name: 'Pause' }),
-    reset: () => page.getByRole('button', { name: 'Reset' }),
+    // break-flow: every control names its phase (exact, so "Start focus" never matches
+    // "Start break"). A hidden slot has no accessible role, so it is simply not found.
+    startFocus: () => page.getByRole('button', { name: 'Start focus', exact: true }),
+    pauseFocus: () => page.getByRole('button', { name: 'Pause focus', exact: true }),
+    resumeFocus: () => page.getByRole('button', { name: 'Resume focus', exact: true }),
+    resetFocus: () => page.getByRole('button', { name: 'Reset focus', exact: true }),
+    startBreak: () => page.getByRole('button', { name: 'Start break', exact: true }),
+    pauseBreak: () => page.getByRole('button', { name: 'Pause break', exact: true }),
+    resumeBreak: () => page.getByRole('button', { name: 'Resume break', exact: true }),
+    resetBreak: () => page.getByRole('button', { name: 'Reset break', exact: true }),
+    controlSlot: (name) => page.locator('.timer-controls [data-slot="' + name + '"]'),
     focusField: () => field('duration-focus'),
     shortBreakField: () => field('duration-short-break'),
     longBreakField: () => field('duration-long-break'),

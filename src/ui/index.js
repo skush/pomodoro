@@ -1,15 +1,16 @@
-// DOM layer: renders the phase label + countdown, wires Start/Pause/Reset, the task
+// DOM layer: renders the phase label + countdown, wires the phase-labelled controls, the task
 // label, the session count, and the adjustable-durations settings fields (three
-// durations + cycle length). Owns all localStorage access, through two write
-// gatekeepers: persistState (session-tracking) and persistDurationConfig
-// (adjustable-durations). The only caller of the logic engine's methods (AC-03) — no
+// durations + cycle length) and the two break-flow toggles. Owns all localStorage
+// access, through three write gatekeepers: persistState (session-tracking),
+// persistDurationConfig (adjustable-durations) and persistBreakFlowSettings
+// (break-flow). The only caller of the logic engine's methods (AC-03) — no
 // other input source (no window 'message' or 'storage' listener, nothing else) is
 // ever wired to it.
 
 import {
   formatDuration,
   PHASES,
-  controlStates,
+  controlLayout,
   validateStoredCount,
   validateStoredDate,
   validateStoredLabel,
@@ -17,6 +18,10 @@ import {
   applyCountUpdate,
   validateStoredDuration,
   validateStoredCycleLength,
+  validateStoredToggle,
+  DEFAULT_BREAK_FLOW_SETTINGS,
+  isOnTimeCompletion,
+  isStaleCompletion,
   validateDurationInput,
   validateCycleLengthInput,
   ringFraction,
@@ -24,6 +29,7 @@ import {
   toneFor,
 } from '../logic/index.js';
 import { createRing } from './ring.js';
+import { createControls } from './controls.js';
 import { createChimePlayer } from './audio.js';
 import { createWakeup } from './wakeup.js';
 
@@ -40,6 +46,9 @@ const FOCUS_DURATION_KEY = 'adjustable-durations:focus-duration';
 const SHORT_BREAK_DURATION_KEY = 'adjustable-durations:short-break-duration';
 const LONG_BREAK_DURATION_KEY = 'adjustable-durations:long-break-duration';
 const CYCLE_LENGTH_KEY = 'adjustable-durations:cycle-length';
+
+const AUTO_START_BREAKS_KEY = 'break-flow:auto-start-breaks';
+const ALLOW_PAUSING_FOCUS_KEY = 'break-flow:allow-pausing-focus';
 
 // session-tracking T4 (ADR-0002, AC-07): the ONLY function anywhere that may call
 // `storage.setItem` for the count/date/label keys — the write guard's single
@@ -141,6 +150,35 @@ export function readPersistedDurationConfig(storage) {
   return config;
 }
 
+// break-flow T5 (sad.md §8 Persistence, spec.md AC-09): the THIRD storage gatekeeper —
+// the only function that may call `storage.setItem` for the two break-flow keys. Always
+// writes BOTH, as 'true'/'false', so a foreign edit to either key is overwritten, never
+// adopted, by the next legitimate write. A throwing (or absent) storage is swallowed: the
+// toggle still applies in memory for the rest of the page load. Returns whether it saved.
+export function persistBreakFlowSettings(storage, settings) {
+  try {
+    storage.setItem(AUTO_START_BREAKS_KEY, String(Boolean(settings.autoStartBreaks)));
+    storage.setItem(ALLOW_PAUSING_FOCUS_KEY, String(Boolean(settings.allowPausingFocus)));
+    return true;
+  } catch {
+    // fail-soft: never throw to the User, never surface an error
+    return false;
+  }
+}
+
+// break-flow T5 (spec.md AC-07/AC-09): each key validated on its own (validateStoredToggle),
+// so a bad value never affects the other. Unlike the durations reader this does NO
+// write-back — the next toggle writes the full pair. Never throws, null storage included.
+export function readPersistedBreakFlowSettings(storage) {
+  return {
+    autoStartBreaks: validateStoredToggle(safeGetItem(storage, AUTO_START_BREAKS_KEY), DEFAULT_BREAK_FLOW_SETTINGS.autoStartBreaks),
+    allowPausingFocus: validateStoredToggle(
+      safeGetItem(storage, ALLOW_PAUSING_FOCUS_KEY),
+      DEFAULT_BREAK_FLOW_SETTINGS.allowPausingFocus,
+    ),
+  };
+}
+
 // adjustable-durations T5/T7 (spec.md AC-06/AC-09/AC-12, sad.md §6 Flow 3): the ONE
 // path both mount() and the pre-start correction use — read + validate each stored
 // value (writing any correction straight back), then push the values now in effect
@@ -157,7 +195,9 @@ export function syncConfigFromStorage(storage, engine) {
 // Start handler does before starting. Returns { config, lastWriteOk } — the config now
 // in effect and whether storage now matches it.
 // - Resume (the phase is paused, not idle) is not a fresh start: nothing is read or
-//   written, the in-memory config stands.
+//   written, the in-memory config stands. `freshStart` (default: the snapshot is idle)
+//   lets break-flow's Start focus count as one when it ends a running or paused break
+//   (the break itself is untouched: a started phase ignores the durations).
 // - Storage unavailable: nothing to read or write, the in-memory config stands.
 // - The last save failed: storage lags what the User committed, so adopting it would
 //   silently discard that commit. Retry the save ONCE (this Start only — no loop, no
@@ -167,8 +207,8 @@ export function syncConfigFromStorage(storage, engine) {
 //   read-validate-correct path mount() uses.
 // `snapshot` is the last rendered snapshot — never a fresh getSnapshot() here, which
 // would consume a pending Focus-completion credit before render() could count it.
-export function prepareStart(storage, engine, config, snapshot, lastWriteOk) {
-  if (!snapshot.idle || storage === null) return { config, lastWriteOk };
+export function prepareStart(storage, engine, config, snapshot, lastWriteOk, freshStart = snapshot.idle) {
+  if (!freshStart || storage === null) return { config, lastWriteOk };
   if (!lastWriteOk && !persistDurationConfig(storage, config)) {
     return { config, lastWriteOk: false };
   }
@@ -218,6 +258,7 @@ function createNumericField({ id, labelText, rangeMessage, validate, initialValu
     }
     message.hidden = true;
     lastValid = result.value;
+    input.value = String(result.value); // "07" becomes "7": an idle field always matches lastValid
     onCommit(result.value);
   }
   input.addEventListener('blur', commit);
@@ -228,13 +269,37 @@ function createNumericField({ id, labelText, rangeMessage, validate, initialValu
     }
   });
 
+  // A field holding text the User typed keeps it: a correction that runs without the User
+  // (the auto-start step) refreshes only the value a rejected commit reverts to. A focused
+  // field the User has not edited still shows the value now in effect, so leaving it
+  // cannot write an old value back.
   function setValue(value) {
+    const typedInto = document.activeElement === input && input.value !== String(lastValid);
     lastValid = value;
-    input.value = String(value);
+    if (!typedInto) input.value = String(value);
   }
 
   wrapper.append(fieldLabel, input, message);
   return { element: wrapper, setValue };
+}
+
+// break-flow T5 (sad.md §8 Settings UI): a labelled checkbox that applies immediately.
+function createToggle({ id, labelText, checked, onChange }) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'toggle-field';
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.id = id;
+  input.checked = checked;
+  input.addEventListener('change', () => onChange(input.checked));
+
+  const fieldLabel = document.createElement('label');
+  fieldLabel.htmlFor = id;
+  fieldLabel.textContent = labelText;
+
+  wrapper.append(input, fieldLabel);
+  return { element: wrapper };
 }
 
 const PHASE_LABELS = {
@@ -254,10 +319,13 @@ const SOUND_NOTICE_TEXT =
 // snapshot carrying `justCompleted` plays that phase's tone exactly once (the engine
 // hands the record over once, ADR-0002); if the tone cannot play the notice shows and
 // nothing is held back for later (AC-11). Nothing here runs for a Start, Pause, Resume,
-// Reset or commit, because those never produce a `justCompleted` (AC-07).
-export function applyCompletionCue(snapshot, { player, setNotice }) {
+// Reset or commit, because those never produce a `justCompleted` (AC-07). A stale
+// completion (noticed more than 2 minutes after its true moment, `now` being when) plays
+// no chime and shows no notice: the User who comes back needs no late sound (AC-06b).
+export function applyCompletionCue(snapshot, { player, setNotice }, now) {
   const completed = snapshot.justCompleted;
   if (!completed) return;
+  if (isStaleCompletion(completed.at, now)) return;
   let played = false;
   try {
     played = player.play(toneFor(completed.phase)) === true;
@@ -310,6 +378,47 @@ export function applyVisualCues(snapshot, { ring, setTitle }) {
   }
 }
 
+// break-flow T7 (ADR-0001, sad.md §6 Flow 1, spec.md AC-01/AC-03): the auto-start step.
+// `snapshot` is snapshot A, the one carrying the one-shot completion record. When it is an
+// On-time Focus completion (noticed <= 5 s after its true end) and Auto-start breaks is on,
+// the break the engine just loaded idle is started — after the same pre-start correction any
+// fresh start gets — with the Focus phase's TRUE end as its start time, so the countdown is
+// exact whenever the page got round to noticing. Returns the display snapshot: snapshot B
+// (break running) after an auto-start, else A untouched. A late completion, the setting off,
+// or a break completion starts nothing: a Focus phase never starts on its own (AC-02), and
+// the engine's settle rule is unchanged. Fail-soft: a failing correction leaves the break
+// waiting, exactly as a late completion would.
+export function autoStartBreak({ snapshot, now, enabled, engine, prepare }) {
+  const completed = snapshot.justCompleted;
+  if (!enabled || !completed || completed.phase !== PHASES.FOCUS) return snapshot;
+  if (!isOnTimeCompletion(completed.at, now)) return snapshot;
+  try {
+    prepare();
+  } catch {
+    return snapshot;
+  }
+  engine.start(completed.at);
+  return engine.getSnapshot(now);
+}
+
+// break-flow T7 (sad.md §8 One-shot consumption): everything one render does with the
+// engine, in its fixed order — getSnapshot A -> auto-start (correction, start(at),
+// getSnapshot B, re-arm the wake-up) -> title -> ring -> chime/notice -> Session credit.
+// The chime, the notice and the credit read snapshot A (it alone carries the completion);
+// the title, ring, controls and wake-up read the DISPLAY snapshot (B after an auto-start,
+// else A), which the caller keeps as `lastSnapshot` so the wake-up callback's
+// syncWakeup(lastSnapshot) re-arms the break instead of cancelling the alarm the auto-start
+// just set. Returns both so the caller can finish the render (text, controls).
+export function renderCycle({ engine, now, autoStartBreaks, prepare, visual, cue, credit, wakeup }) {
+  const snapshot = engine.getSnapshot(now);
+  const display = autoStartBreak({ snapshot, now, enabled: autoStartBreaks, engine, prepare });
+  if (display !== snapshot) syncWakeup(display, wakeup);
+  applyVisualCues(display, visual);
+  applyCompletionCue(snapshot, cue, now);
+  credit(now, snapshot.justCompletedFocusAt);
+  return { snapshot, display };
+}
+
 export function mount(root, engine) {
   root.innerHTML = '';
   const card = document.createElement('div');
@@ -336,20 +445,9 @@ export function mount(root, engine) {
   };
   const chimePlayer = createChimePlayer();
 
-  const controls = document.createElement('div');
-  controls.className = 'timer-controls';
-
-  const startBtn = document.createElement('button');
-  startBtn.type = 'button';
-  startBtn.textContent = 'Start';
-
-  const pauseBtn = document.createElement('button');
-  pauseBtn.type = 'button';
-  pauseBtn.textContent = 'Pause';
-
-  const resetBtn = document.createElement('button');
-  resetBtn.type = 'button';
-  resetBtn.textContent = 'Reset';
+  // break-flow T6 (ADR-0003): three fixed slot buttons painted from controlLayout(); every
+  // press reports an action name to handleAction, which is the only route to the engine.
+  const controls = createControls((action) => handleAction(action));
 
   const labelFieldId = 'task-label';
   const labelLimitMessageId = 'task-label-limit-message';
@@ -376,8 +474,7 @@ export function mount(root, engine) {
   const sessionCount = document.createElement('p');
   sessionCount.className = 'session-count';
 
-  controls.append(startBtn, pauseBtn, resetBtn);
-  card.append(ring.element, label, countdown, controls, soundNotice, labelFieldLabel, labelField, labelLimitMessage, sessionCount);
+  card.append(ring.element, label, countdown, controls.element, soundNotice, labelFieldLabel, labelField, labelLimitMessage, sessionCount);
   root.append(card);
 
   const storage = acquireStorage();
@@ -386,6 +483,11 @@ export function mount(root, engine) {
   let config = syncConfigFromStorage(storage, engine);
   // review fix #1: false once a commit's write failed — storage then lags memory.
   let lastWriteOk = true;
+  // break-flow T5 (sad.md §4 decision 7): read once, at load only (AC-12). Auto-start
+  // breaks lives in memory because only the auto-start branch reads it; Allow pausing
+  // focus is pushed into the engine, the only place it lives.
+  let breakFlow = readPersistedBreakFlowSettings(storage);
+  engine.setAllowPausingFocus(breakFlow.allowPausingFocus);
   const persisted = readPersistedState(storage);
   labelField.value = persisted.label;
   let lastAcceptedLabel = persisted.label;
@@ -505,30 +607,65 @@ export function mount(root, engine) {
   cycleGroup.append(cycleLengthField.element);
   card.append(cycleGroup);
 
+  // break-flow T5 (spec.md AC-07/AC-09/AC-17): a toggle applies at once and never alters
+  // a phase already in progress — the engine only changes what pause() may do from now on.
+  // Both values go to storage as the full pair; a refused write is swallowed and the new
+  // value still applies for this page load.
+  function commitBreakFlowSettings(next) {
+    breakFlow = { ...breakFlow, ...next };
+    engine.setAllowPausingFocus(breakFlow.allowPausingFocus);
+    persistBreakFlowSettings(storage, breakFlow);
+    render();
+  }
+
+  const autoStartToggle = createToggle({
+    id: 'auto-start-breaks',
+    labelText: 'Auto-start breaks',
+    checked: breakFlow.autoStartBreaks,
+    onChange: (checked) => commitBreakFlowSettings({ autoStartBreaks: checked }),
+  });
+  const allowPausingToggle = createToggle({
+    id: 'allow-pausing-focus',
+    labelText: 'Allow pausing focus',
+    checked: breakFlow.allowPausingFocus,
+    onChange: (checked) => commitBreakFlowSettings({ allowPausingFocus: checked }),
+  });
+  const breakFlowGroup = document.createElement('div');
+  breakFlowGroup.className = 'settings-group toggle-group';
+  breakFlowGroup.append(autoStartToggle.element, allowPausingToggle.element);
+  card.append(breakFlowGroup);
+
   // The snapshot render() last showed — what the User saw when they pressed Start.
   let lastSnapshot = null;
 
   function render() {
     const now = Date.now();
-    const snapshot = engine.getSnapshot(now);
-    lastSnapshot = snapshot;
-    const phaseText = PHASE_LABELS[snapshot.phase] ?? snapshot.phase;
-    if (label.textContent !== phaseText) label.textContent = phaseText;
-    const countdownText = formatDuration(snapshot.remainingMs);
-    if (countdown.textContent !== countdownText) countdown.textContent = countdownText;
-    const { startDisabled, pauseDisabled } = controlStates(snapshot);
-    startBtn.disabled = startDisabled;
-    pauseBtn.disabled = pauseDisabled;
-    // sad.md §8 One-shot consumption: fixed order title -> ring -> chime/notice -> Session
-    // counter.
-    applyVisualCues(snapshot, {
-      ring,
-      setTitle: (text) => {
-        if (document.title !== text) document.title = text;
+    // sad.md §8 One-shot consumption: renderCycle owns the fixed order (snapshot A ->
+    // auto-start -> title -> ring -> chime/notice -> Session credit); what the page shows
+    // and re-arms from is the display snapshot it returns.
+    const { display } = renderCycle({
+      engine,
+      now,
+      autoStartBreaks: breakFlow.autoStartBreaks,
+      prepare: prepareAutoStart,
+      visual: {
+        ring,
+        setTitle: (text) => {
+          if (document.title !== text) document.title = text;
+        },
       },
+      cue: { player: chimePlayer, setNotice },
+      credit: updateSessionCount,
+      wakeup,
     });
-    applyCompletionCue(snapshot, { player: chimePlayer, setNotice });
-    updateSessionCount(now, snapshot.justCompletedFocusAt);
+    lastSnapshot = display;
+    const phaseText = PHASE_LABELS[display.phase] ?? display.phase;
+    if (label.textContent !== phaseText) label.textContent = phaseText;
+    const countdownText = formatDuration(display.remainingMs);
+    if (countdown.textContent !== countdownText) countdown.textContent = countdownText;
+    // break-flow T6 (AC-10/AC-11): the controls follow the snapshot; keyboard focus that
+    // would be stranded moves to the main slot, or to the phase name when main is empty.
+    controls.update(controlLayout(display, now), label);
   }
 
   // sensory-feedback T10: the wake-up only re-runs render() (a read) and re-arms from
@@ -538,47 +675,83 @@ export function mount(root, engine) {
     syncWakeup(lastSnapshot, wakeup);
   });
 
-  // Moves focus to the control that just became enabled when the one the
-  // User's keyboard focus was on just got disabled, so Space/Enter activation
-  // never strands focus on a now-inert button (US-02 keyboard activation).
-  function refocusIfStranded(previouslyFocused, nowEnabledBtn) {
-    if (document.activeElement === previouslyFocused && !nowEnabledBtn.disabled) {
-      nowEnabledBtn.focus();
-    }
-  }
-
   // adjustable-durations T7 (spec.md AC-06/AC-12, sad.md §6 Flow 3): the pre-start
   // correction — for a fresh start, re-reads storage through the same path mount()
   // used, so an invalid value that appeared between load and Start is corrected (and
   // written back) before the phase begins; prepareStart() decides when that applies.
   // The fields then show the values now in effect.
-  function refreshConfigFromStorage() {
-    ({ config, lastWriteOk } = prepareStart(storage, engine, config, lastSnapshot, lastWriteOk));
+  function refreshConfigFromStorage(freshStart) {
+    ({ config, lastWriteOk } = prepareStart(storage, engine, config, lastSnapshot, lastWriteOk, freshStart));
     for (const { key, field } of durationFields) field.setValue(config[key]);
     cycleLengthField.setValue(config.cycleLength);
   }
 
-  startBtn.addEventListener('click', () => {
-    // Start and Resume are the User's own gesture: enable sound here, before the phase
-    // runs unattended. Called synchronously so the resume() happens inside the press.
+  function afterAction() {
+    render();
+    syncWakeup(lastSnapshot, wakeup);
+  }
+
+  // break-flow T6 (sad.md §6 Flows 2-4): every control press lands here, and each handler
+  // calls the engine at most once. Start focus, Start break and Resume are the User's own
+  // gesture, so they enable sound synchronously — before the phase runs unattended and a
+  // later auto-start has to chime. The engine itself enforces the Skip guard and the
+  // focus-pause policy (ADR-0002): this layer only forwards.
+  // break-flow T7: the auto-start step's pre-start correction — a fresh start like any other
+  // (adjustable-durations AC-06), though the displayed Focus phase is not idle.
+  function prepareAutoStart() {
+    refreshConfigFromStorage(true);
+  }
+
+  function handleStartBreak() {
     unlockSound(chimePlayer, setNotice);
     refreshConfigFromStorage();
     engine.start(Date.now());
-    render();
-    syncWakeup(lastSnapshot, wakeup);
-    refocusIfStranded(startBtn, pauseBtn);
-  });
-  pauseBtn.addEventListener('click', () => {
+    afterAction();
+  }
+
+  // Start focus ends a break (running, paused or waiting) through engine.startFocus; on a
+  // waiting Focus phase — the main control after a completed break — it is a plain start.
+  // Either way it is a fresh Focus, so the pre-start correction runs first.
+  function handleStartFocus() {
+    unlockSound(chimePlayer, setNotice);
+    refreshConfigFromStorage(true);
+    const now = Date.now();
+    if (lastSnapshot.phase === PHASES.FOCUS) engine.start(now);
+    else engine.startFocus(now);
+    afterAction();
+  }
+
+  // Resume Focus and Resume break: not a fresh start, so no correction.
+  function handleResume() {
+    unlockSound(chimePlayer, setNotice);
+    engine.start(Date.now());
+    afterAction();
+  }
+
+  function handlePause() {
     engine.pause(Date.now());
-    render();
-    syncWakeup(lastSnapshot, wakeup);
-    refocusIfStranded(pauseBtn, startBtn);
-  });
-  resetBtn.addEventListener('click', () => {
+    afterAction();
+  }
+
+  function handleReset() {
     engine.reset(Date.now());
-    render();
-    syncWakeup(lastSnapshot, wakeup);
-  });
+    afterAction();
+  }
+
+  const ACTION_HANDLERS = {
+    startFocus: handleStartFocus,
+    pauseFocus: handlePause,
+    resumeFocus: handleResume,
+    resetFocus: handleReset,
+    startBreak: handleStartBreak,
+    pauseBreak: handlePause,
+    resumeBreak: handleResume,
+    resetBreak: handleReset,
+  };
+
+  function handleAction(action) {
+    ACTION_HANDLERS[action]?.();
+  }
 
   // Reconcile against real elapsed time as soon as the tab becomes visible
   // again (AC-05), rather than waiting for the next interval tick.

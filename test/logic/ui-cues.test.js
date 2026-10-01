@@ -36,6 +36,7 @@ describe('applyVisualCues (AC-01, AC-02, AC-04, AC-08, AC-09)', () => {
     const ring = fakeRing();
     let title = '';
     const setTitle = (t) => (title = t);
+    engine.setAllowPausingFocus(true); // break-flow AC-16: Focus may be paused
     engine.start(0);
     applyVisualCues(engine.getSnapshot(5 * MIN), { ring, setTitle });
     assert.equal(ring.calls.at(-1)[0], 20 / 25);

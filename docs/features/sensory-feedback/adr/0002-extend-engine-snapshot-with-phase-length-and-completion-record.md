@@ -97,3 +97,5 @@ Shape (for `tasks`):
 - SAD: [[../sad.md]] §4 (decision 4), §5, §6
 - Related ADR: [[0001-wake-the-page-at-the-deadline-from-an-inline-worker]] (triggers the render
   that consumes this record); [session-tracking ADR-0001](../../session-tracking/adr/0001-expose-true-focus-completion-timestamp.md)
+
+> **Amendment (2026-10-01, owner):** sensory-feedback `spec.md` AC-06b changed. A stale completion, one the page notices more than 2 minutes after its true moment, plays no chime and shows no sound-unavailable notice, so "exactly one chime per completion" holds for every non-stale completion. The decision recorded here is unchanged; the text above is left as written.

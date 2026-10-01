@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createTimerEngine, formatDuration, controlStates, PHASES } from '../../src/logic/index.js';
+import * as logic from '../../src/logic/index.js';
+import { createTimerEngine, formatDuration, PHASES } from '../../src/logic/index.js';
 
 const MIN = 60 * 1000;
 const FOCUS = 25 * MIN;
@@ -51,6 +52,7 @@ describe('pause/resume (AC-02b, AC-02c)', () => {
 
   test('resumes from exactly the frozen remaining time, never full duration', () => {
     const engine = createTimerEngine();
+    engine.setAllowPausingFocus(true); // break-flow AC-16: Focus may be paused
     engine.start(0);
     engine.pause(10_000); // paused 10s in
     const paused = engine.getSnapshot(60_000); // time keeps passing while paused
@@ -65,11 +67,14 @@ describe('pause/resume (AC-02b, AC-02c)', () => {
 });
 
 describe('engine surface (AC-03)', () => {
-  test('exposes exactly start/pause/reset/getSnapshot/setConfiguredDurations/setCycleLength and is frozen', () => {
+  // break-flow ADR-0002 deliberately amends this pin from six methods to eight: startFocus
+  // and setAllowPausingFocus join the engine so the Skip guard and the focus-pause policy
+  // live where no input path can bypass them.
+  test('exposes exactly the eight engine methods and is frozen', () => {
     const engine = createTimerEngine();
     assert.deepEqual(
       Object.keys(engine).sort(),
-      ['getSnapshot', 'pause', 'reset', 'setConfiguredDurations', 'setCycleLength', 'start'],
+      ['getSnapshot', 'pause', 'reset', 'setAllowPausingFocus', 'setConfiguredDurations', 'setCycleLength', 'start', 'startFocus'],
     );
     assert.equal(Object.isFrozen(engine), true);
   });
@@ -230,36 +235,13 @@ describe('drift-free countdown (spec §6 NFR, ADR core-timer/0001)', () => {
   });
 });
 
-describe('controlStates (AC-02)', () => {
-  test('Pause is disabled and Start enabled while idle', () => {
-    const engine = createTimerEngine();
-    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(0));
-    assert.equal(startDisabled, false);
-    assert.equal(pauseDisabled, true);
-  });
-
-  test('Pause is enabled and Start disabled while running', () => {
-    const engine = createTimerEngine();
-    engine.start(0);
-    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(1000));
-    assert.equal(startDisabled, true);
-    assert.equal(pauseDisabled, false);
-  });
-
-  test('Pause is disabled again once paused', () => {
-    const engine = createTimerEngine();
-    engine.start(0);
-    engine.pause(1000);
-    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(1000));
-    assert.equal(startDisabled, false);
-    assert.equal(pauseDisabled, true);
-  });
-
-  test('Pause is disabled again once a phase completes and the next one is idle', () => {
-    const engine = createTimerEngine();
-    engine.start(0);
-    const { pauseDisabled } = controlStates(engine.getSnapshot(FOCUS));
-    assert.equal(pauseDisabled, true);
+// break-flow T6 (ADR-0003): controlStates(snapshot) -> {startDisabled, pauseDisabled} is replaced
+// by controlLayout and its Start/Pause enablement tests by the AC-10 table test in
+// break-flow.test.js; the old export must be gone so nothing can still depend on it.
+describe('controlStates (retired by break-flow)', () => {
+  test('is no longer exported by the logic module', () => {
+    assert.equal(logic.controlStates, undefined);
+    assert.equal(typeof logic.controlLayout, 'function');
   });
 });
 
@@ -467,6 +449,7 @@ describe('setConfiguredDurations (adjustable-durations T1)', () => {
 
   test('AC-05: a paused phase with partially elapsed time keeps its frozen remainingMs', () => {
     const engine = createTimerEngine();
+    engine.setAllowPausingFocus(true); // break-flow AC-16: Focus may be paused
     engine.start(0);
     engine.pause(7 * MIN);
     const frozen = engine.getSnapshot(7 * MIN).remainingMs;
@@ -810,6 +793,7 @@ describe('phaseFullMs and justCompleted (sensory-feedback ADR-0002)', () => {
 
   test('AC-07: Pause or Reset just before zero means the phase never completes', () => {
     const paused = createTimerEngine();
+    paused.setAllowPausingFocus(true); // break-flow AC-16: Focus may be paused
     paused.start(0);
     paused.pause(FOCUS - 1);
     assert.equal(paused.getSnapshot(FOCUS + MIN).justCompleted, null);
@@ -838,9 +822,256 @@ describe('phaseFullMs and justCompleted (sensory-feedback ADR-0002)', () => {
     assert.equal(snap.remainingMs, 30 * MIN);
   });
 
-  test('the engine surface is still the six control methods (no new control method)', () => {
+  test('the engine surface is the eight methods amended by break-flow ADR-0002', () => {
     assert.deepEqual(Object.keys(createTimerEngine()).sort(), [
-      'getSnapshot', 'pause', 'reset', 'setConfiguredDurations', 'setCycleLength', 'start',
+      'getSnapshot', 'pause', 'reset', 'setAllowPausingFocus', 'setConfiguredDurations', 'setCycleLength', 'start', 'startFocus',
     ]);
+  });
+});
+
+// break-flow T2 (ADR-0001, ADR-0002): startedAt, the backdated start, startFocus with the
+// Skip guard, and the focus-pause policy. Injected clock throughout.
+describe('break-flow engine (T2)', () => {
+  // A started Focus phase; callers advance the clock past its deadline to land on the break.
+  function engineAtBreak() {
+    const engine = createTimerEngine();
+    engine.start(0);
+    return engine;
+  }
+
+  test('snapshot shape pin: startedAt and allowPausingFocus join the frozen snapshot', () => {
+    const snap = createTimerEngine().getSnapshot(0);
+    assert.deepEqual(Object.keys(snap).sort(), [
+      'allowPausingFocus', 'focusCount', 'idle', 'justCompleted', 'justCompletedFocusAt',
+      'phase', 'phaseFullMs', 'remainingMs', 'running', 'startedAt',
+    ]);
+    assert.equal(Object.isFrozen(snap), true);
+    assert.equal(snap.startedAt, null);
+    assert.equal(snap.allowPausingFocus, false);
+  });
+
+  test('start records startedAt on a fresh start only; pause and resume keep it', () => {
+    const engine = createTimerEngine();
+    engine.setAllowPausingFocus(true);
+    engine.start(1000);
+    assert.equal(engine.getSnapshot(1500).startedAt, 1000);
+    engine.pause(2000);
+    assert.equal(engine.getSnapshot(2500).startedAt, 1000);
+    engine.start(9000); // resume — not a fresh start
+    assert.equal(engine.getSnapshot(9500).startedAt, 1000);
+  });
+
+  test('reset and a completion clear startedAt (a waiting phase has no Skip guard)', () => {
+    const engine = createTimerEngine();
+    engine.setAllowPausingFocus(true);
+    engine.start(0);
+    engine.pause(1000);
+    engine.reset(2000);
+    assert.equal(engine.getSnapshot(2000).startedAt, null);
+    engine.start(3000);
+    const after = engine.getSnapshot(3000 + FOCUS);
+    assert.equal(after.phase, PHASES.SHORT_BREAK);
+    assert.equal(after.startedAt, null);
+  });
+
+  test('backdated start(at): remaining = full - (now - at) within 1 s, startedAt = at (ADR-0001)', () => {
+    const engine = engineAtBreak();
+    const at = FOCUS; // the Focus phase's true end
+    const now = at + 4000; // noticed 4 s late
+    const snap = engine.getSnapshot(now); // consumes the completion; the break waits
+    assert.equal(snap.phase, PHASES.SHORT_BREAK);
+    assert.equal(snap.idle, true);
+    assert.equal(snap.running, false);
+    assert.equal(snap.justCompleted.phase, PHASES.FOCUS);
+    assert.equal(snap.justCompleted.at, at);
+    engine.start(at);
+    const running = engine.getSnapshot(now);
+    assert.equal(running.running, true);
+    assert.equal(running.startedAt, at);
+    assert.ok(Math.abs(running.remainingMs - (SHORT - 4000)) <= 1000);
+    assert.equal(running.justCompleted, null); // one completion record per completion
+  });
+
+  test('a late completion leaves the break waiting at full length (AC-03)', () => {
+    const engine = engineAtBreak();
+    const snap = engine.getSnapshot(FOCUS + 60 * MIN);
+    assert.equal(snap.phase, PHASES.SHORT_BREAK);
+    assert.equal(snap.running, false);
+    assert.equal(snap.remainingMs, SHORT);
+    assert.equal(snap.startedAt, null);
+  });
+
+  test('setAllowPausingFocus: default off, coerces to boolean, shows in the snapshot', () => {
+    const engine = createTimerEngine();
+    assert.equal(engine.getSnapshot(0).allowPausingFocus, false);
+    engine.setAllowPausingFocus(true);
+    assert.equal(engine.getSnapshot(0).allowPausingFocus, true);
+    engine.setAllowPausingFocus(0);
+    assert.equal(engine.getSnapshot(0).allowPausingFocus, false);
+    assert.doesNotThrow(() => engine.setAllowPausingFocus(undefined));
+  });
+
+  test('pause of a running Focus is a no-op while the policy is off (AC-15)', () => {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.pause(10_000);
+    const snap = engine.getSnapshot(20_000);
+    assert.equal(snap.running, true);
+    assert.equal(snap.remainingMs, FOCUS - 20_000);
+  });
+
+  test('pause and resume of Focus work when the policy is on (AC-16)', () => {
+    const engine = createTimerEngine();
+    engine.setAllowPausingFocus(true);
+    engine.start(0);
+    engine.pause(10_000);
+    assert.equal(engine.getSnapshot(50_000).running, false);
+    assert.equal(engine.getSnapshot(50_000).remainingMs, FOCUS - 10_000);
+    engine.start(60_000);
+    assert.equal(engine.getSnapshot(70_000).remainingMs, FOCUS - 20_000);
+  });
+
+  test('a Focus paused before the policy went off stays paused; resume and reset still work', () => {
+    const engine = createTimerEngine();
+    engine.setAllowPausingFocus(true);
+    engine.start(0);
+    engine.pause(10_000);
+    engine.setAllowPausingFocus(false);
+    assert.equal(engine.getSnapshot(11_000).running, false);
+    engine.start(12_000);
+    assert.equal(engine.getSnapshot(12_000).running, true);
+    engine.reset(13_000);
+    assert.equal(engine.getSnapshot(13_000).idle, true);
+  });
+
+  test('breaks always pause, whatever the policy', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    engine.pause(FOCUS + 10_000);
+    assert.equal(engine.getSnapshot(FOCUS + 20_000).running, false);
+  });
+
+  test('startFocus ends a running break: Focus running, no chime record, focusCount unchanged (AC-04, AC-04b)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    const t = FOCUS + 10_000;
+    engine.startFocus(t);
+    const snap = engine.getSnapshot(t);
+    assert.equal(snap.phase, PHASES.FOCUS);
+    assert.equal(snap.running, true);
+    assert.equal(snap.remainingMs, FOCUS);
+    assert.equal(snap.startedAt, t);
+    assert.equal(snap.focusCount, 1);
+    assert.equal(snap.justCompleted, null);
+    assert.equal(snap.justCompletedFocusAt, null);
+  });
+
+  test('startFocus uses the current Configured focus duration (AC-04)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    engine.setConfiguredDurations({ focus: 40, shortBreak: 5, longBreak: 15 });
+    engine.startFocus(FOCUS + 5000);
+    const snap = engine.getSnapshot(FOCUS + 5000);
+    assert.equal(snap.phaseFullMs, 40 * MIN);
+    assert.equal(snap.remainingMs, 40 * MIN);
+  });
+
+  test('startFocus: Skip guard edges — no-op at 2999 ms, allowed at 3000 ms (AC-05)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    engine.startFocus(FOCUS + 2999);
+    assert.equal(engine.getSnapshot(FOCUS + 2999).phase, PHASES.SHORT_BREAK);
+    assert.equal(engine.getSnapshot(FOCUS + 2999).running, true);
+    engine.startFocus(FOCUS + 3000);
+    assert.equal(engine.getSnapshot(FOCUS + 3000).phase, PHASES.FOCUS);
+  });
+
+  test('startFocus: a break paused inside the guard stays guarded until 3 s of real time pass (AC-05)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    engine.pause(FOCUS + 1000);
+    engine.startFocus(FOCUS + 2000);
+    assert.equal(engine.getSnapshot(FOCUS + 2000).phase, PHASES.SHORT_BREAK);
+    engine.startFocus(FOCUS + 3000);
+    assert.equal(engine.getSnapshot(FOCUS + 3000).phase, PHASES.FOCUS);
+  });
+
+  test('startFocus: Resume break starts no new guard (AC-05)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    engine.pause(FOCUS + 1000);
+    engine.start(FOCUS + 60_000); // resume well after the guard
+    engine.startFocus(FOCUS + 60_001);
+    assert.equal(engine.getSnapshot(FOCUS + 60_001).phase, PHASES.FOCUS);
+  });
+
+  test('startFocus on a waiting break is allowed at once — no guard (AC-04, AC-05)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS + 1); // break waits, startedAt null
+    engine.startFocus(FOCUS + 1);
+    const snap = engine.getSnapshot(FOCUS + 1);
+    assert.equal(snap.phase, PHASES.FOCUS);
+    assert.equal(snap.running, true);
+    assert.equal(snap.focusCount, 1);
+  });
+
+  test('startFocus pressed just after the break really ended starts that Focus (AC-04)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    const press = FOCUS + 5 * MIN + 1; // 1 ms past the break deadline, before any render tick settled it
+    engine.startFocus(press);
+    const snap = engine.getSnapshot(press);
+    assert.equal(snap.phase, PHASES.FOCUS);
+    assert.equal(snap.running, true);
+    assert.equal(snap.remainingMs, FOCUS);
+    assert.equal(snap.startedAt, press);
+  });
+
+  test('startFocus is a no-op in any Focus state', () => {
+    const engine = createTimerEngine();
+    engine.startFocus(0); // waiting Focus
+    assert.equal(engine.getSnapshot(0).running, false);
+    engine.start(1000);
+    engine.startFocus(50_000); // running Focus — must not restart it
+    const snap = engine.getSnapshot(60_000);
+    assert.equal(snap.startedAt, 1000);
+    assert.equal(snap.remainingMs, FOCUS - 59_000);
+  });
+
+  test('a Skipped Long break continues from the first Focus with focusCount 0 (AC-04b)', () => {
+    const engine = createTimerEngine();
+    let t = 0;
+    for (let i = 0; i < 3; i += 1) {
+      engine.start(t);
+      t += FOCUS;
+      engine.getSnapshot(t); // short break waiting
+      engine.startFocus(t); // skip it (waiting — no guard)
+    }
+    t += FOCUS; // Focus #4 completes
+    const longBreak = engine.getSnapshot(t);
+    assert.equal(longBreak.phase, PHASES.LONG_BREAK);
+    assert.equal(longBreak.focusCount, 0);
+    engine.startFocus(t);
+    const snap = engine.getSnapshot(t);
+    assert.equal(snap.phase, PHASES.FOCUS);
+    assert.equal(snap.focusCount, 0);
+  });
+
+  test('a break completion still latches one break-end record and the next Focus waits (AC-02)', () => {
+    const engine = engineAtBreak();
+    engine.getSnapshot(FOCUS);
+    engine.start(FOCUS);
+    const snap = engine.getSnapshot(FOCUS + SHORT);
+    assert.equal(snap.phase, PHASES.FOCUS);
+    assert.equal(snap.running, false);
+    assert.equal(snap.justCompleted.phase, PHASES.SHORT_BREAK);
+    assert.equal(snap.startedAt, null);
   });
 });
