@@ -410,8 +410,211 @@ sequenceDiagram
 **Late completion after a sleep or a frozen tab (AC-03)** — no separate diagram. It is Flow 1's
 "late completion" branch: one Focus-end chime, the session credited as session-tracking decides,
 and the break waiting at full length with Start break and Start focus, since `settle()` leaves it
-idle and nothing starts it. `sequences` expands every §5 AC, including AC-06 (break controls),
-AC-15/AC-17 (focus-pause policy) and AC-11 (keyboard focus).
+idle and nothing starts it. Flows 3 to 6 below cover the break controls, the Focus pause policy, the settings and the keyboard focus rule.
+
+**Critical flow 3: Break controls and break end (AC-02, AC-05, AC-06, AC-14)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+    participant Store as Local storage
+    participant Worker as Wake-up worker
+    participant Audio as Audio output
+
+    Note over UI,Engine: a break is on screen (SCR-04 waiting, SCR-05 running, SCR-06 paused)
+    alt break waiting - Start break
+        User->>UI: presses Start break
+        UI->>UI: unlockSound inside this press
+        UI->>Store: pre-start correction - re-read and correct saved durations
+        UI->>Engine: start(now)
+        Note over Engine: break running at the Configured duration, startedAt = now, Skip guard begins
+        UI->>Worker: arm for the break's remaining time
+    else break running - Pause break
+        User->>UI: presses Pause break
+        UI->>Engine: pause(now)
+        Note over Engine: remaining time frozen, startedAt kept, so the Skip guard is not extended
+        UI->>Worker: cancel
+    else break paused - Resume break
+        User->>UI: presses Resume break
+        UI->>UI: unlockSound inside this press
+        UI->>Engine: start(now)
+        Note over Engine: continues from the frozen time, no new Skip guard
+        UI->>Worker: arm for the remaining time
+    else break running or paused - Reset break
+        User->>UI: presses Reset break
+        UI->>Engine: reset()
+        Note over Engine: break back to the current Configured duration, stopped, startedAt cleared
+        UI->>Worker: cancel
+    end
+    UI->>UI: render - controlLayout, never Start focus in the slot Reset break left (AC-10)
+    Note over UI,Engine: later, a running break reaches zero
+    Worker->>UI: wake
+    UI->>Engine: getSnapshot(now)
+    Engine->>Engine: settle - next Focus loads idle at its full length, no auto-start
+    Engine-->>UI: snapshot - Focus waiting, justCompleted break
+    alt sound available
+        UI->>Audio: break-end tone, once
+        Audio-->>User: break-end chime
+    else sound blocked or suspended
+        UI-->>User: sound-unavailable notice
+    end
+    UI-->>User: Focus waiting with Start focus (SCR-01)
+```
+
+Every break control acts only on the break and never starts Focus. A break paused inside the Skip
+guard keeps Start focus greyed until three real seconds have passed since the break's start, and
+Resume break starts no new guard. A running break that reaches zero always leaves Focus waiting,
+with one break-end chime, whether it was auto-started or started by the User and whatever
+Auto-start breaks says (AC-02). A change to a Configured duration made after a break started leaves
+that break at its length and takes effect at Reset break or the next fresh start (AC-14).
+
+**Critical flow 4: Pausing Focus under the Allow pausing focus policy (AC-15, AC-16, AC-17)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+    participant Store as Local storage
+    participant Worker as Wake-up worker
+
+    Note over UI,Engine: Focus running (SCR-02)
+    alt Allow pausing focus on
+        UI->>UI: controlLayout - Pause focus in the main slot, Reset focus beside it
+        User->>UI: presses Pause focus
+        UI->>Engine: pause(now)
+        Engine-->>UI: snapshot - Focus paused, remaining frozen
+        UI->>Worker: cancel
+        User->>UI: presses Resume focus
+        UI->>Engine: start(now)
+        Engine-->>UI: snapshot - Focus running from the frozen time
+        UI->>Worker: arm for the remaining time
+    else Allow pausing focus off
+        UI->>UI: controlLayout - main slot empty, only Reset focus
+        Note over UI,Engine: a pause request by any other path reaches the engine anyway
+        UI->>Engine: pause(now)
+        Engine->>Engine: no-op - running Focus is not pausable while the policy is off
+        Engine-->>UI: snapshot unchanged - Focus keeps running
+    end
+    opt User presses Reset focus
+        User->>UI: presses Reset focus
+        UI->>Engine: reset()
+        Note over Engine: Focus back to full length, waiting, never counted as a Focus session
+        UI->>Worker: cancel
+    end
+    Note over User,Store: the policy is toggled while a Focus phase is in progress
+    User->>UI: toggles Allow pausing focus
+    UI->>Engine: setAllowPausingFocus(on)
+    UI->>Store: persist the setting
+    Note over Engine: the phase itself is never altered - a Focus paused before turning it off stays paused and can be resumed or reset
+    UI->>UI: render - Pause focus appears or disappears at once, keyboard focus per Flow 6
+```
+
+The rule lives in the engine, so the hidden Pause focus control is a presentation of the rule and
+not its enforcement (ADR-0002). Turning the setting off never freezes or discards a phase, and
+turning it on offers Pause focus immediately to a Focus already running.
+
+**Critical flow 5: Settings load, change and other-tab input (AC-07, AC-09, AC-12, AC-17)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+    participant Store as Local storage
+    participant Other as Other tab
+
+    Note over UI,Store: page load
+    UI->>Store: read the auto-start-breaks and allow-pausing-focus keys
+    alt value missing, unreadable or not a valid on/off
+        UI->>UI: validateStoredToggle falls back to the default - auto-start on, pausing off
+    else storage blocked or throws
+        UI->>UI: defaults for this page load, no error shown
+    else valid value
+        UI->>UI: use the saved value
+    end
+    UI->>Engine: setAllowPausingFocus(value)
+    UI-->>User: both toggles shown next to the durations (SCR-07)
+    Note over User,Store: User changes a setting
+    User->>UI: toggles Auto-start breaks or Allow pausing focus
+    UI->>UI: apply to this page now, no phase in progress is altered
+    UI->>Store: persist the setting
+    alt browser refuses to save
+        UI->>UI: keep the new value for the rest of this page load, no error shown
+    end
+    Note over Other,UI: another tab saves different setting values or sends a message
+    Other-->>UI: storage change or cross-tab message
+    UI->>UI: ignored - timer and settings change only from this page's own inputs
+    Note over UI,Store: the other tab's saved values are read at this page's next load
+```
+
+Auto-start breaks is read when a Focus phase completes, from the value held on this page, so a
+Focus already running follows whatever the toggle says at that moment. Neither setting is
+re-read from storage while the page is open, so another tab cannot change this page's behaviour
+(AC-12). Saved durations keep their existing read points: page load and before each fresh start.
+
+**Critical flow 6: Keyboard focus after the control set changes (AC-11, ADR-0003)**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as UI layer
+    participant Engine as Timer engine
+    participant Ctl as Control slots
+
+    Note over UI,Ctl: keyboard focus is on a control
+    Note over UI,Engine: the set of controls changes - a press, an auto-start, a completion, the Skip guard ending, or a setting hiding a control
+    UI->>Engine: getSnapshot(now)
+    Engine-->>UI: snapshot
+    UI->>Ctl: update(controlLayout(snapshot, now))
+    Ctl->>Ctl: where was keyboard focus before the update
+    alt keyboard focus is outside the timer controls - Task label, a duration field, a setting
+        Ctl->>Ctl: do not move keyboard focus
+    else focused slot still holds the same action
+        Ctl->>Ctl: keep keyboard focus
+    else focused slot is the pause toggle and now reads Resume, or the reverse
+        Ctl->>Ctl: keep keyboard focus on that slot, so a double press pauses then resumes
+    else focused control disappeared or became unavailable
+        alt main slot holds a control, including Start focus greyed inside the Skip guard
+            Ctl->>Ctl: move keyboard focus to the main slot
+        else main slot empty - Focus running with pausing off
+            Ctl->>Ctl: move keyboard focus to the phase name and countdown, never onto Reset focus
+        end
+    end
+    UI-->>User: the phase change is announced the way phase changes already are
+```
+
+A greyed-out Start focus uses `aria-disabled`, so it can hold keyboard focus and a reflex key press
+does nothing. Reset focus and Reset break are never a landing target, so a repeated press cannot
+discard a phase.
+
+**Coverage map (every §4 user story and §5 acceptance criterion)**
+
+| Item | Where it is shown |
+|---|---|
+| US-01 | Flow 1, Flow 3 |
+| US-02 | Flow 2 |
+| US-03 | Flow 3 |
+| US-04 | Flow 1 (auto-start and off branches), Flow 5 |
+| US-05 | Flow 1 (late-completion branch) |
+| US-06 | Flow 6, plus AC-10 below |
+| US-07 | Flow 4 |
+| AC-01, AC-03, AC-08, AC-13 | Flow 1 |
+| AC-02 | Flow 1 (only a Focus completion auto-starts), Flow 3 (break end leaves Focus waiting) |
+| AC-04, AC-05 | Flow 2, Flow 3 (pause inside the guard) |
+| AC-04b | Flow 2: Start focus leaves the in-cycle focus count untouched, and a Skipped break adds nothing |
+| AC-06 | Flow 3 |
+| AC-07, AC-09, AC-12 | Flow 5 |
+| AC-10 | Non-runtime: the pure `controlLayout` table is unit-tested, with no runtime sequence |
+| AC-11 | Flow 6 |
+| AC-14 | Flow 1 (pre-start correction), Flow 3 (a started break keeps its length) |
+| AC-15, AC-16, AC-17 | Flow 4, Flow 5 (persisted toggle) |
+
+**Flagged for design (not changed here):** Flow 5 shows `Other tab` as an extra actor that §5 does
+not declare; it only marks input the page must ignore. Flow 6 uses `Ctl` for the three slot
+buttons of `src/ui/controls.js`, already named in §5.
 
 ## 7. Deployment view
 
