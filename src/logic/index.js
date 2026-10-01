@@ -333,3 +333,7 @@ export function formatDuration(ms) {
 
 // sensory-feedback: the pure cue rules (tone data, ring fraction, tab-title text).
 export { TONES, toneFor, ringFraction, tabTitle } from './feedback.js';
+
+// break-flow: the pure On-time / Skip-guard / toggle rules (star export so later
+// break-flow tasks add names in controls.js without touching this file).
+export * from './controls.js';
