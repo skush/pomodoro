@@ -1,0 +1,219 @@
+{
+  "slug": "break-flow",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Add pure On-time, Skip-guard and stored-toggle rules in src/logic/controls.js",
+      "layer": "domain",
+      "deps": [],
+      "acs": [
+        "AC-01",
+        "AC-05",
+        "AC-09"
+      ],
+      "dod": "Unit tests pass: isOnTimeCompletion is true at 5000 ms and false at 5001 ms; isSkipGuardActive is true below 3000 ms and false from 3000 ms after the snapshot's startedAt; validateStoredToggle falls back to the default for missing, malformed or non-boolean values.",
+      "files_hint": [
+        "src/logic/controls.js",
+        "src/logic/index.js",
+        "test/logic/break-flow.test.js"
+      ],
+      "file": "docs/features/break-flow/tasks/on-time-skip-guard-and-toggle-rules.md"
+    },
+    {
+      "id": "T2",
+      "title": "Extend the engine: startedAt, startFocus(now), setAllowPausingFocus(on) and the focus-pause policy",
+      "layer": "domain",
+      "deps": [
+        "T1"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-04b",
+        "AC-05",
+        "AC-15",
+        "AC-16"
+      ],
+      "dod": "Engine unit tests (injected clock) pass: startFocus ends a break with no justCompleted and no focusCount change, is a no-op inside the 3 s guard, pause() of a running Focus is a no-op while the policy is off, a backdated start(at) leaves remaining = full − (now − at) within 1 s, and the engine-surface and snapshot-shape pins match the amended eight methods.",
+      "files_hint": [
+        "src/logic/index.js",
+        "test/logic/timer-engine.test.js"
+      ],
+      "file": "docs/features/break-flow/tasks/engine-startfocus-guard-and-pause-policy.md"
+    },
+    {
+      "id": "T3",
+      "title": "Add the pure controlLayout(snapshot, now) rule and phase-named CONTROL_LABELS",
+      "layer": "domain",
+      "deps": [
+        "T1"
+      ],
+      "acs": [
+        "AC-06",
+        "AC-08",
+        "AC-10"
+      ],
+      "dod": "An exhaustive unit test over every phase × run-state × Skip-guard × allowPausingFocus combination matches the AC-10 table, including: Pause/Resume of one phase at the same index, Start focus greyed only inside the guard, and Start focus never at the index Reset break occupies.",
+      "files_hint": [
+        "src/logic/controls.js",
+        "test/logic/break-flow.test.js"
+      ],
+      "file": "docs/features/break-flow/tasks/control-layout-and-labels.md"
+    },
+    {
+      "id": "T4",
+      "title": "Build createControls(onAction): three fixed slot buttons and the keyboard-focus rule",
+      "layer": "ui",
+      "deps": [
+        "T3"
+      ],
+      "acs": [
+        "AC-10",
+        "AC-11"
+      ],
+      "dod": "Unit tests (plain Node, no DOM) of the exported focus-target decision pass for: same action keeps focus, pause toggle keeps focus across Pause↔Resume, a vanished control moves focus to main (including greyed Start focus), an empty main moves it to the phase name/countdown and never to Reset, and focus outside the slots is never moved.",
+      "files_hint": [
+        "src/ui/controls.js",
+        "test/logic/ui-controls.test.js"
+      ],
+      "file": "docs/features/break-flow/tasks/control-slots-and-keyboard-focus.md"
+    },
+    {
+      "id": "T5",
+      "title": "Add the Auto-start breaks and Allow pausing focus toggles with a third storage gatekeeper",
+      "layer": "ui",
+      "deps": [
+        "T1",
+        "T2"
+      ],
+      "acs": [
+        "AC-07",
+        "AC-09",
+        "AC-12",
+        "AC-17"
+      ],
+      "dod": "Unit tests with a fake and a throwing storage pass: persistBreakFlowSettings always writes both keys as 'true'/'false', readPersistedBreakFlowSettings falls back per key without writing back, and write-guard.test.js allows only that gatekeeper to write the two keys; the built page shows both toggles next to the durations, pushes allowPausingFocus to the engine at mount and on every toggle, and defaults to on/off.",
+      "files_hint": [
+        "src/ui/index.js",
+        "src/styles.css",
+        "test/logic/write-guard.test.js",
+        "test/logic/break-flow-settings.test.js"
+      ],
+      "file": "docs/features/break-flow/tasks/break-flow-settings-toggles-and-gatekeeper.md"
+    },
+    {
+      "id": "T6",
+      "title": "Replace Start/Pause/Reset with the phase-labelled slots and route every action to the engine",
+      "layer": "ui",
+      "deps": [
+        "T2",
+        "T3",
+        "T4",
+        "T5"
+      ],
+      "acs": [
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-15",
+        "AC-16"
+      ],
+      "dod": "The built page shows the AC-10 controls for every state; Start focus, Start break and Resume focus/break call unlockSound synchronously and run the pre-start correction exactly once before a fresh start; controlStates and refocusIfStranded are gone with their tests; write-guard.test.js pins the correction call sites to the Start break and Start focus handlers; npm test and npm run lint pass.",
+      "files_hint": [
+        "src/ui/index.js",
+        "src/logic/index.js",
+        "src/styles.css",
+        "test/logic/write-guard.test.js",
+        "test/logic/timer-engine.test.js"
+      ],
+      "file": "docs/features/break-flow/tasks/phase-labelled-controls-wiring.md"
+    },
+    {
+      "id": "T7",
+      "title": "Auto-start the break after an On-time Focus completion (backdated start in render)",
+      "layer": "app",
+      "deps": [
+        "T2",
+        "T5",
+        "T6"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-13",
+        "AC-14"
+      ],
+      "dod": "Unit tests of an exported, injectable auto-start step pass: an On-time Focus completion with the setting on yields a running break with remaining ≈ full − (now − at), exactly one chime and one session credit from snapshot A, wake-up armed for the break and lastSnapshot holding the display snapshot; a late completion, the setting off, or a break completion never starts anything; the sound-unavailable notice appears at auto-start when sound is unavailable.",
+      "files_hint": [
+        "src/ui/index.js",
+        "test/logic/ui-autostart.test.js",
+        "test/logic/write-guard.test.js"
+      ],
+      "file": "docs/features/break-flow/tasks/auto-start-break-on-ontime-completion.md"
+    },
+    {
+      "id": "T8",
+      "title": "Move the existing e2e helpers and scripts to the phase-labelled controls",
+      "layer": "tests",
+      "deps": [
+        "T6"
+      ],
+      "acs": [
+        "AC-10"
+      ],
+      "dod": "npm run build then npm run test:e2e passes with the existing scenarios unchanged in intent, now driving Start focus / Pause focus / Reset focus (Allow pausing focus seeded on where a test pauses Focus) and Start break where a break waits.",
+      "files_hint": [
+        "test-e2e/helpers.js",
+        "test-e2e/durations.e2e.js",
+        "test-e2e/sensory-feedback.e2e.js",
+        "test-e2e/sensory-feedback-chime.e2e.js",
+        "test-e2e/smoke.e2e.js"
+      ],
+      "file": "docs/features/break-flow/tasks/migrate-existing-e2e-selectors.md"
+    },
+    {
+      "id": "T9",
+      "title": "Add test-e2e/break-flow.e2e.js: auto-start, return-after-sleep, Start focus, keyboard focus",
+      "layer": "tests",
+      "deps": [
+        "T7",
+        "T8"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-11",
+        "AC-13"
+      ],
+      "dod": "npm run build then node --test test-e2e/break-flow.e2e.js passes on the fake page clock: auto-start within 5 s, a late completion leaves the break waiting with one chime, Start focus works outside the Skip guard and does nothing inside it, keyboard focus follows AC-11, and the sound notice shows at auto-start; the file is listed in the test:e2e script.",
+      "files_hint": [
+        "test-e2e/break-flow.e2e.js",
+        "package.json"
+      ],
+      "file": "docs/features/break-flow/tasks/e2e-break-flow.md"
+    },
+    {
+      "id": "T10",
+      "title": "Regenerate index.html and run the spec §6 manual timing checks",
+      "layer": "wiring",
+      "deps": [
+        "T9"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-03"
+      ],
+      "dod": "The regenerated index.html is committed with the source; npm test, npm run lint and npm run test:e2e are green; the manual notes record the stopwatch accuracy check of an auto-started break (≤ 1 s), the Start focus response (≤ 250 ms) and one real return-after-sleep run (break waiting, one chime).",
+      "files_hint": [
+        "index.html",
+        "docs/features/break-flow/_review/manual-timing-check.md"
+      ],
+      "file": "docs/features/break-flow/tasks/build-and-manual-verification.md"
+    }
+  ]
+}
