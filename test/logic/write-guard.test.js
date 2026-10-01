@@ -11,7 +11,7 @@ import {
   syncConfigFromStorage,
   prepareStart,
 } from '../../src/ui/index.js';
-import { createTimerEngine } from '../../src/logic/index.js';
+import { createTimerEngine, CONTROL_LABELS } from '../../src/logic/index.js';
 
 // session-tracking T4 (ADR-0002, spec.md AC-07): persistState/readPersistedState
 // take an injected `storage` parameter (never the bare `localStorage` global
@@ -376,16 +376,6 @@ describe('duration write-guard call sites (adjustable-durations T7)', () => {
       assert.equal(next !== -1 && next < limit, true, trigger + ' does not call persistDurationConfig');
     }
   });
-
-  test('the Start handler runs the pre-start correction before starting the engine', () => {
-    const handler = uiContents.match(/startBtn\.addEventListener\('click', \(\) => \{([\s\S]*?)\n {2}\}\);/);
-    assert.notEqual(handler, null, 'Start click handler not found');
-    const body = handler[1];
-    const correction = body.indexOf('refreshConfigFromStorage()');
-    const start = body.indexOf('engine.start(');
-    assert.notEqual(correction, -1, 'Start handler does not run the pre-start correction');
-    assert.equal(correction < start, true, 'pre-start correction must run before engine.start');
-  });
 });
 
 // review fix #1/#3 (adjustable-durations AC-01/AC-03/AC-06/AC-08): the decision the
@@ -570,12 +560,27 @@ describe('duration write-guard reader call sites (adjustable-durations review fi
     assert.deepEqual(callersOf('prepareStart'), ['refreshConfigFromStorage']);
   });
 
-  test('refreshConfigFromStorage (the pre-start correction) is called exactly once, from the Start click handler', () => {
-    const calls = (uiContents.match(/\brefreshConfigFromStorage\(\)/g) || []).length - 1; // minus the declaration
-    assert.equal(calls, 1, 'the pre-start correction must have exactly one trigger');
-    const handler = uiContents.match(/startBtn\.addEventListener\('click', \(\) => \{([\s\S]*?)\n {2}\}\);/);
-    assert.notEqual(handler, null, 'Start click handler not found');
-    assert.equal(handler[1].includes('refreshConfigFromStorage()'), true);
+  // break-flow T6 (sad.md §5, ADR-0003): the pre-start correction is re-pinned from the
+  // single Start click handler to the legitimate fresh-start triggers — the Start break and
+  // Start focus handlers (T7 adds the auto-start step as the third).
+  test('refreshConfigFromStorage (the pre-start correction) is called only by the Start break and Start focus handlers', () => {
+    assert.deepEqual(callersOf('refreshConfigFromStorage'), ['handleStartBreak', 'handleStartFocus']);
+  });
+
+  test('each of those handlers unlocks sound first, then corrects, then starts — in that order', () => {
+    for (const [handler, engineCall] of [
+      ['handleStartBreak', 'engine.start('],
+      ['handleStartFocus', 'engine.startFocus('],
+    ]) {
+      const match = uiContents.match(new RegExp('function ' + handler + '\\(\\) \\{([\\s\\S]*?)\\n {2}\\}'));
+      assert.notEqual(match, null, handler + ' not found');
+      const body = match[1];
+      const unlock = body.indexOf('unlockSound(');
+      const correct = body.indexOf('refreshConfigFromStorage(');
+      const start = body.indexOf(engineCall);
+      assert.equal(unlock !== -1 && unlock < correct && correct < start, true, handler + ': unlockSound -> correction -> ' + engineCall);
+      assert.equal(body.includes('await'), false, handler + ' must stay synchronous so the audio unlock happens inside the press');
+    }
   });
 
   test('no other src/ module calls the duration read/write helpers', () => {
@@ -648,5 +653,109 @@ describe('break-flow write-guard (T5)', () => {
     assert.equal(calls, 2, 'once at mount, once in the toggle handler');
     const handler = uiContents.match(/function commitBreakFlowSettings\b[\s\S]*?\n {2}\}/);
     assert.equal(handler[0].includes('engine.setAllowPausingFocus('), true);
+  });
+});
+
+describe('prepareStart — a fresh Focus started from a break (break-flow T6)', () => {
+  const MIN = 60 * 1000;
+
+  function runningBreak() {
+    const engine = createTimerEngine();
+    engine.start(0);
+    engine.getSnapshot(25 * MIN); // Focus completes; the short break waits
+    engine.start(25 * MIN); // Start break
+    return engine;
+  }
+
+  test('with freshStart the correction runs even though the displayed break is running, and the break is untouched', () => {
+    const storage = recordingStorage();
+    const engine = runningBreak();
+    const config = syncConfigFromStorage(storage, engine);
+    storage.setItem('adjustable-durations:focus-duration', '0'); // invalid between load and the press
+    const snapshot = engine.getSnapshot(25 * MIN + 10_000);
+    assert.equal(snapshot.idle, false);
+    const next = prepareStart(storage, engine, config, snapshot, true, true);
+    assert.equal(next.config.focus, 25);
+    assert.equal(storage.getItem('adjustable-durations:focus-duration'), '25');
+    // the running break keeps its pinned length and remaining time
+    const after = engine.getSnapshot(25 * MIN + 10_000);
+    assert.equal(after.phase, 'short_break');
+    assert.equal(after.running, true);
+    assert.equal(after.remainingMs, 5 * MIN - 10_000);
+  });
+
+  test('without freshStart a running break is still not a fresh start (Resume path unchanged)', () => {
+    const storage = recordingStorage();
+    const engine = runningBreak();
+    const config = syncConfigFromStorage(storage, engine);
+    storage.setItem('adjustable-durations:focus-duration', '0');
+    storage.writes.length = 0;
+    const snapshot = engine.getSnapshot(25 * MIN + 10_000);
+    assert.deepEqual(prepareStart(storage, engine, config, snapshot, true), { config, lastWriteOk: true });
+    assert.deepEqual(storage.writes, []);
+  });
+
+  test('a fresh Focus started via the corrected config runs the Configured focus duration', () => {
+    const storage = recordingStorage({ 'adjustable-durations:focus-duration': '40' });
+    const engine = runningBreak();
+    const config = syncConfigFromStorage(storage, engine);
+    prepareStart(storage, engine, config, engine.getSnapshot(25 * MIN + 10_000), true, true);
+    engine.startFocus(25 * MIN + 10_000);
+    assert.equal(engine.getSnapshot(25 * MIN + 10_000).remainingMs, 40 * MIN);
+  });
+});
+
+// break-flow T6 (sad.md §5/§6 Flows 2-4, ADR-0003): how the page routes the slot actions.
+describe('phase-labelled controls wiring (break-flow T6)', () => {
+  const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src');
+  const uiContents = readFileSync(path.join(srcDir, 'ui/index.js'), 'utf8').replace(/\/\/.*$/gm, '');
+
+  function bodyOfInner(name) {
+    const match = uiContents.match(new RegExp('function ' + name + '\\(\\) \\{([\\s\\S]*?)\\n {2}\\}'));
+    assert.notEqual(match, null, name + ' not found');
+    return match[1];
+  }
+
+  test('the old Start/Pause/Reset buttons, controlStates and refocusIfStranded are gone from the page', () => {
+    for (const gone of ['controlStates', 'refocusIfStranded', 'startBtn', 'pauseBtn', 'resetBtn']) {
+      assert.equal(uiContents.includes(gone), false, gone + ' is still referenced in src/ui/index.js');
+    }
+  });
+
+  test('mount builds createControls and render() paints controlLayout(snapshot, now)', () => {
+    assert.equal(/createControls\(/.test(uiContents), true);
+    assert.equal(/controls\.update\(\s*controlLayout\(snapshot, now\)/.test(uiContents), true);
+  });
+
+  test('every layout action has a handler', () => {
+    const table = uiContents.match(/const ACTION_HANDLERS = \{([\s\S]*?)\n {2}\};/);
+    assert.notEqual(table, null, 'ACTION_HANDLERS not found');
+    for (const action of Object.keys(CONTROL_LABELS)) {
+      assert.equal(new RegExp('\\b' + action + ':').test(table[1]), true, 'no handler for ' + action);
+    }
+  });
+
+  test('Start focus, Start break and Resume (focus and break) unlock sound synchronously inside the press', () => {
+    for (const handler of ['handleStartFocus', 'handleStartBreak', 'handleResume']) {
+      const body = bodyOfInner(handler);
+      assert.equal(body.includes('unlockSound('), true, handler);
+      assert.equal(body.includes('await'), false, handler);
+    }
+  });
+
+  test('Pause and Reset never unlock sound or touch storage; each ends with render + wake-up sync', () => {
+    for (const handler of ['handlePause', 'handleReset']) {
+      const body = bodyOfInner(handler);
+      assert.equal(body.includes('unlockSound('), false, handler);
+      assert.equal(/refreshConfigFromStorage|persist/.test(body), false, handler);
+    }
+    const finish = uiContents.match(/function afterAction\(\) \{([\s\S]*?)\n {2}\}/);
+    assert.notEqual(finish, null, 'afterAction not found');
+    assert.equal(finish[1].includes('render()') && finish[1].includes('syncWakeup('), true);
+  });
+
+  test('a waiting Focus is started through engine.start, a break is ended through engine.startFocus', () => {
+    const body = bodyOfInner('handleStartFocus');
+    assert.equal(/engine\.start\(/.test(body) && /engine\.startFocus\(/.test(body), true);
   });
 });

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createTimerEngine, formatDuration, controlStates, PHASES } from '../../src/logic/index.js';
+import * as logic from '../../src/logic/index.js';
+import { createTimerEngine, formatDuration, PHASES } from '../../src/logic/index.js';
 
 const MIN = 60 * 1000;
 const FOCUS = 25 * MIN;
@@ -234,37 +235,13 @@ describe('drift-free countdown (spec §6 NFR, ADR core-timer/0001)', () => {
   });
 });
 
-describe('controlStates (AC-02)', () => {
-  test('Pause is disabled and Start enabled while idle', () => {
-    const engine = createTimerEngine();
-    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(0));
-    assert.equal(startDisabled, false);
-    assert.equal(pauseDisabled, true);
-  });
-
-  test('Pause is enabled and Start disabled while running', () => {
-    const engine = createTimerEngine();
-    engine.start(0);
-    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(1000));
-    assert.equal(startDisabled, true);
-    assert.equal(pauseDisabled, false);
-  });
-
-  test('Pause is disabled again once paused', () => {
-    const engine = createTimerEngine();
-    engine.setAllowPausingFocus(true); // break-flow AC-16: Focus may be paused
-    engine.start(0);
-    engine.pause(1000);
-    const { startDisabled, pauseDisabled } = controlStates(engine.getSnapshot(1000));
-    assert.equal(startDisabled, false);
-    assert.equal(pauseDisabled, true);
-  });
-
-  test('Pause is disabled again once a phase completes and the next one is idle', () => {
-    const engine = createTimerEngine();
-    engine.start(0);
-    const { pauseDisabled } = controlStates(engine.getSnapshot(FOCUS));
-    assert.equal(pauseDisabled, true);
+// break-flow T6 (ADR-0003): controlStates(snapshot) -> {startDisabled, pauseDisabled} is replaced
+// by controlLayout and its Start/Pause enablement tests by the AC-10 table test in
+// break-flow.test.js; the old export must be gone so nothing can still depend on it.
+describe('controlStates (retired by break-flow)', () => {
+  test('is no longer exported by the logic module', () => {
+    assert.equal(logic.controlStates, undefined);
+    assert.equal(typeof logic.controlLayout, 'function');
   });
 });
 

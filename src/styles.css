@@ -79,6 +79,18 @@ body {
   margin-top: 1rem;
 }
 
+/* break-flow: three fixed slots. An empty slot keeps its place (hidden, not removed), so a
+   control never jumps under the pointer when its neighbour appears or goes. */
+.timer-controls button[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+.timer-phase:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
 .timer-controls button {
   padding: 0.6rem 1.25rem;
   font-size: 1rem;
@@ -90,11 +102,13 @@ body {
   cursor: pointer;
 }
 
-.timer-controls button:hover:not(:disabled) {
+.timer-controls button:hover:not([aria-disabled='true']) {
   border-color: var(--fg);
 }
 
-.timer-controls button:disabled {
+/* The greyed Start focus inside the Skip guard: aria-disabled (not disabled), so it can
+   still hold keyboard focus and a reflex key press does nothing. */
+.timer-controls button[aria-disabled='true'] {
   opacity: 0.4;
   cursor: default;
 }

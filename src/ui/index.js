@@ -1,4 +1,4 @@
-// DOM layer: renders the phase label + countdown, wires Start/Pause/Reset, the task
+// DOM layer: renders the phase label + countdown, wires the phase-labelled controls, the task
 // label, the session count, and the adjustable-durations settings fields (three
 // durations + cycle length) and the two break-flow toggles. Owns all localStorage
 // access, through three write gatekeepers: persistState (session-tracking),
@@ -10,7 +10,7 @@
 import {
   formatDuration,
   PHASES,
-  controlStates,
+  controlLayout,
   validateStoredCount,
   validateStoredDate,
   validateStoredLabel,
@@ -27,6 +27,7 @@ import {
   toneFor,
 } from '../logic/index.js';
 import { createRing } from './ring.js';
+import { createControls } from './controls.js';
 import { createChimePlayer } from './audio.js';
 import { createWakeup } from './wakeup.js';
 
@@ -192,7 +193,9 @@ export function syncConfigFromStorage(storage, engine) {
 // Start handler does before starting. Returns { config, lastWriteOk } — the config now
 // in effect and whether storage now matches it.
 // - Resume (the phase is paused, not idle) is not a fresh start: nothing is read or
-//   written, the in-memory config stands.
+//   written, the in-memory config stands. `freshStart` (default: the snapshot is idle)
+//   lets break-flow's Start focus count as one when it ends a running or paused break
+//   (the break itself is untouched: a started phase ignores the durations).
 // - Storage unavailable: nothing to read or write, the in-memory config stands.
 // - The last save failed: storage lags what the User committed, so adopting it would
 //   silently discard that commit. Retry the save ONCE (this Start only — no loop, no
@@ -202,8 +205,8 @@ export function syncConfigFromStorage(storage, engine) {
 //   read-validate-correct path mount() uses.
 // `snapshot` is the last rendered snapshot — never a fresh getSnapshot() here, which
 // would consume a pending Focus-completion credit before render() could count it.
-export function prepareStart(storage, engine, config, snapshot, lastWriteOk) {
-  if (!snapshot.idle || storage === null) return { config, lastWriteOk };
+export function prepareStart(storage, engine, config, snapshot, lastWriteOk, freshStart = snapshot.idle) {
+  if (!freshStart || storage === null) return { config, lastWriteOk };
   if (!lastWriteOk && !persistDurationConfig(storage, config)) {
     return { config, lastWriteOk: false };
   }
@@ -390,20 +393,9 @@ export function mount(root, engine) {
   };
   const chimePlayer = createChimePlayer();
 
-  const controls = document.createElement('div');
-  controls.className = 'timer-controls';
-
-  const startBtn = document.createElement('button');
-  startBtn.type = 'button';
-  startBtn.textContent = 'Start';
-
-  const pauseBtn = document.createElement('button');
-  pauseBtn.type = 'button';
-  pauseBtn.textContent = 'Pause';
-
-  const resetBtn = document.createElement('button');
-  resetBtn.type = 'button';
-  resetBtn.textContent = 'Reset';
+  // break-flow T6 (ADR-0003): three fixed slot buttons painted from controlLayout(); every
+  // press reports an action name to handleAction, which is the only route to the engine.
+  const controls = createControls((action) => handleAction(action));
 
   const labelFieldId = 'task-label';
   const labelLimitMessageId = 'task-label-limit-message';
@@ -430,8 +422,7 @@ export function mount(root, engine) {
   const sessionCount = document.createElement('p');
   sessionCount.className = 'session-count';
 
-  controls.append(startBtn, pauseBtn, resetBtn);
-  card.append(ring.element, label, countdown, controls, soundNotice, labelFieldLabel, labelField, labelLimitMessage, sessionCount);
+  card.append(ring.element, label, countdown, controls.element, soundNotice, labelFieldLabel, labelField, labelLimitMessage, sessionCount);
   root.append(card);
 
   const storage = acquireStorage();
@@ -603,9 +594,6 @@ export function mount(root, engine) {
     if (label.textContent !== phaseText) label.textContent = phaseText;
     const countdownText = formatDuration(snapshot.remainingMs);
     if (countdown.textContent !== countdownText) countdown.textContent = countdownText;
-    const { startDisabled, pauseDisabled } = controlStates(snapshot);
-    startBtn.disabled = startDisabled;
-    pauseBtn.disabled = pauseDisabled;
     // sad.md §8 One-shot consumption: fixed order title -> ring -> chime/notice -> Session
     // counter.
     applyVisualCues(snapshot, {
@@ -616,6 +604,9 @@ export function mount(root, engine) {
     });
     applyCompletionCue(snapshot, { player: chimePlayer, setNotice });
     updateSessionCount(now, snapshot.justCompletedFocusAt);
+    // break-flow T6 (AC-10/AC-11): the controls follow the snapshot; keyboard focus that
+    // would be stranded moves to the main slot, or to the phase name when main is empty.
+    controls.update(controlLayout(snapshot, now), label);
   }
 
   // sensory-feedback T10: the wake-up only re-runs render() (a read) and re-arms from
@@ -625,47 +616,77 @@ export function mount(root, engine) {
     syncWakeup(lastSnapshot, wakeup);
   });
 
-  // Moves focus to the control that just became enabled when the one the
-  // User's keyboard focus was on just got disabled, so Space/Enter activation
-  // never strands focus on a now-inert button (US-02 keyboard activation).
-  function refocusIfStranded(previouslyFocused, nowEnabledBtn) {
-    if (document.activeElement === previouslyFocused && !nowEnabledBtn.disabled) {
-      nowEnabledBtn.focus();
-    }
-  }
-
   // adjustable-durations T7 (spec.md AC-06/AC-12, sad.md §6 Flow 3): the pre-start
   // correction — for a fresh start, re-reads storage through the same path mount()
   // used, so an invalid value that appeared between load and Start is corrected (and
   // written back) before the phase begins; prepareStart() decides when that applies.
   // The fields then show the values now in effect.
-  function refreshConfigFromStorage() {
-    ({ config, lastWriteOk } = prepareStart(storage, engine, config, lastSnapshot, lastWriteOk));
+  function refreshConfigFromStorage(freshStart) {
+    ({ config, lastWriteOk } = prepareStart(storage, engine, config, lastSnapshot, lastWriteOk, freshStart));
     for (const { key, field } of durationFields) field.setValue(config[key]);
     cycleLengthField.setValue(config.cycleLength);
   }
 
-  startBtn.addEventListener('click', () => {
-    // Start and Resume are the User's own gesture: enable sound here, before the phase
-    // runs unattended. Called synchronously so the resume() happens inside the press.
+  function afterAction() {
+    render();
+    syncWakeup(lastSnapshot, wakeup);
+  }
+
+  // break-flow T6 (sad.md §6 Flows 2-4): every control press lands here, and each handler
+  // calls the engine at most once. Start focus, Start break and Resume are the User's own
+  // gesture, so they enable sound synchronously — before the phase runs unattended and a
+  // later auto-start has to chime. The engine itself enforces the Skip guard and the
+  // focus-pause policy (ADR-0002): this layer only forwards.
+  function handleStartBreak() {
     unlockSound(chimePlayer, setNotice);
     refreshConfigFromStorage();
     engine.start(Date.now());
-    render();
-    syncWakeup(lastSnapshot, wakeup);
-    refocusIfStranded(startBtn, pauseBtn);
-  });
-  pauseBtn.addEventListener('click', () => {
+    afterAction();
+  }
+
+  // Start focus ends a break (running, paused or waiting) through engine.startFocus; on a
+  // waiting Focus phase — the main control after a completed break — it is a plain start.
+  // Either way it is a fresh Focus, so the pre-start correction runs first.
+  function handleStartFocus() {
+    unlockSound(chimePlayer, setNotice);
+    refreshConfigFromStorage(true);
+    const now = Date.now();
+    if (lastSnapshot.phase === PHASES.FOCUS) engine.start(now);
+    else engine.startFocus(now);
+    afterAction();
+  }
+
+  // Resume Focus and Resume break: not a fresh start, so no correction.
+  function handleResume() {
+    unlockSound(chimePlayer, setNotice);
+    engine.start(Date.now());
+    afterAction();
+  }
+
+  function handlePause() {
     engine.pause(Date.now());
-    render();
-    syncWakeup(lastSnapshot, wakeup);
-    refocusIfStranded(pauseBtn, startBtn);
-  });
-  resetBtn.addEventListener('click', () => {
+    afterAction();
+  }
+
+  function handleReset() {
     engine.reset(Date.now());
-    render();
-    syncWakeup(lastSnapshot, wakeup);
-  });
+    afterAction();
+  }
+
+  const ACTION_HANDLERS = {
+    startFocus: handleStartFocus,
+    pauseFocus: handlePause,
+    resumeFocus: handleResume,
+    resetFocus: handleReset,
+    startBreak: handleStartBreak,
+    pauseBreak: handlePause,
+    resumeBreak: handleResume,
+    resetBreak: handleReset,
+  };
+
+  function handleAction(action) {
+    ACTION_HANDLERS[action]?.();
+  }
 
   // Reconcile against real elapsed time as soon as the tab becomes visible
   // again (AC-05), rather than waiting for the next interval tick.

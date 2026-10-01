@@ -48,7 +48,7 @@ function clampRemaining(fullMs, remainingMs) {
 // stateful export (break-flow ADR-0002 grew it from six methods to eight) (AC-03: the engine only ever
 // changes in response to these methods, called only by src/ui/, never from a
 // 'message'/'storage' listener or any other input source). Every other export —
-// PHASES, DEFAULT_DURATIONS_MIN, DEFAULT_CYCLE_LENGTH, controlStates, formatDuration,
+// PHASES, DEFAULT_DURATIONS_MIN, DEFAULT_CYCLE_LENGTH, controlLayout, formatDuration,
 // the date/count helpers and the input/stored-value validators — is a frozen constant
 // or a pure function with no access to engine state, so none can widen the guard
 // (ADR-0002).
@@ -235,19 +235,9 @@ export function createTimerEngine() {
   });
 }
 
-// Pure control-enablement mapping (AC-02): the Pause control is disabled
-// whenever the timer is not running. Kept here, not in src/ui/, so it is
-// unit-testable without a DOM.
-export function controlStates(snapshot) {
-  return Object.freeze({
-    startDisabled: snapshot.running,
-    pauseDisabled: !snapshot.running,
-  });
-}
-
 // session-tracking T2 (spec.md AC-06/AC-06b): pure data-in/data-out, no engine-state
 // access — kept here so it's unit-testable under plain Node, same reasoning as
-// formatDuration/controlStates. Formats a ms timestamp as the LOCAL calendar day,
+// formatDuration. Formats a ms timestamp as the LOCAL calendar day,
 // lexicographically sortable so string comparison equals date-order comparison.
 export function localDateString(ms) {
   const d = new Date(ms);
