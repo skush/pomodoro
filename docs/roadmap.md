@@ -1,6 +1,6 @@
 ---
 status: living
-updated_at: "2026-09-30"
+updated_at: "2026-10-01"
 ---
 
 # Roadmap — pomodoro
@@ -25,6 +25,7 @@ Anyone can open a single self-contained `index.html` and run reliable, visually/
 | 4 | [Adjustable durations + cycle length](features/adjustable-durations/spec.md) | `idea-brief.md` §7 Recommendation | S | shipped |
 | 5 | [Sensory feedback (progress ring, tab-title mirror, chime, dark UI)](features/sensory-feedback/spec.md) | `idea-brief.md` §1 Raw idea | S | shipped |
 | 6 | Firefox support for the background chime (hidden-tab timing run, `file://` worker check) | [`sensory-feedback/spec.md`](features/sensory-feedback/spec.md) §3 | XS | fog — nice-to-have, much later |
+| 7 | [Break flow (auto-start breaks, Start focus during a break, Allow pausing focus)](features/break-flow/spec.md) | owner's daily use (2026-10-01) | S | spec'd |
 
 ## Not yet specified
 
@@ -60,6 +61,8 @@ flowchart LR
   s2 -->|needs the countdown/phase state to drive ring/title/chime| s5["5 · Sensory feedback"]
   s4 -->|ring/tab-title must read the adjustable duration, not a hardcoded one, to avoid rework| s5
   s5 -->|the wake-up worker and chime must exist before they can be verified on Firefox| s6["6 · Firefox support"]
+  s5 -->|the auto-started break must drive the ring, tab title, chime and sound notice| s7["7 · Break flow"]
+  s4 -->|the auto-started break and Start focus use the Configured durations and their fresh-start check| s7
 ```
 
 ## Execution path
@@ -70,8 +73,9 @@ flowchart LR
 | 2 | 2 | `src/logic/`, `src/ui/` | 3, 4 |
 | 3 | 3 | `src/ui/` (shared — serialized, not parallel with 4) | — |
 | 4 | 4 | `src/ui/`, `src/logic/` (shared — serialized, not parallel with 3) | 5 |
-| 5 | 5 | `src/ui/`, `src/styles.css` (deferred — built last, after step 4 ships and is checked) | 6 |
-| 6 | 6 | verification only, plus a fallback fix if Firefox needs one (fog — nice-to-have, much later; not yet formulated) | — |
+| 5 | 5 | `src/ui/`, `src/styles.css` (deferred — built last, after step 4 ships and is checked) | 6, 7 |
+| 6 | 7 | `src/logic/`, `src/ui/` (engine transitions + controls + settings; taken before step 6, which stays parked) | — |
+| 7 | 6 | verification only, plus a fallback fix if Firefox needs one (fog — nice-to-have, much later; not yet formulated) | — |
 
 ## Shipped
 
