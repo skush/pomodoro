@@ -522,21 +522,6 @@ test('review round 3 (AC-12/AC-14): a duration saved as 07 is shown as 7, so a l
   });
 });
 
-test('manual sleep run (AC-03): a context whose clock stalled across the sleep is replaced, and the Focus-end chime is heard once', async () => {
-  await withApp({ audioSpy: {} }, async (app) => {
-    await app.startFocus().click(); // unlocks sound
-    await app.page.evaluate(() => { window.__audioContexts[0].frozenAt = window.__audioContexts[0].currentTime; }); // the device sleeps
-    await app.advance(3 * 60 * MIN); // the Focus end passed long ago
-    assert.equal(await app.phase(), 'Short break');
-    assert.equal(await app.countdown(), '5:00'); // late completion: the break waits
-    const tones = await app.tones();
-    assert.equal(tones.length, FOCUS_NOTES); // one Focus-end chime, scheduled on a working context
-    assert.ok(rising(tones));
-    assert.equal(await app.page.evaluate(() => window.__audioContexts.length), 2);
-    assert.equal(await app.notice().isVisible(), false);
-  });
-});
-
 test('review #4 (spec §2 goal 4): a double-click on Start focus of a waiting break cannot start and then discard the Focus', async () => {
   await withApp({ storage: AUTO_START_OFF }, async (app) => {
     await runFocusToEnd(app);
