@@ -9,6 +9,8 @@ export const PHASES = Object.freeze({
   LONG_BREAK: 'long_break',
 });
 
+import { isSkipGuardActive } from './controls.js';
+
 const MS_PER_MINUTE = 60 * 1000;
 
 // adjustable-durations: classic defaults, in whole minutes — the fallback for any
@@ -41,8 +43,9 @@ function clampRemaining(fullMs, remainingMs) {
   return Math.min(fullMs, Math.max(0, remainingMs));
 }
 
-// createTimerEngine() -> { start, pause, reset, getSnapshot, setConfiguredDurations,
-// setCycleLength } is the module's only stateful export (AC-03: the engine only ever
+// createTimerEngine() -> { start, startFocus, pause, reset, getSnapshot,
+// setConfiguredDurations, setCycleLength, setAllowPausingFocus } is the module's only
+// stateful export (break-flow ADR-0002 grew it from six methods to eight) (AC-03: the engine only ever
 // changes in response to these methods, called only by src/ui/, never from a
 // 'message'/'storage' listener or any other input source). Every other export —
 // PHASES, DEFAULT_DURATIONS_MIN, DEFAULT_CYCLE_LENGTH, controlStates, formatDuration,
@@ -78,6 +81,12 @@ export function createTimerEngine() {
   // phase completed and its true deadline — so the UI can pick the right tone exactly
   // once. Latched in settle(), consumed by the getSnapshot() that returns it.
   let justCompleted = null;
+  // break-flow ADR-0002: the timestamp of the current phase's fresh start (may be the
+  // backdated true Focus end, ADR-0001), kept through pause/resume; null while the phase
+  // is waiting. The Skip guard is measured from it.
+  let startedAt = null;
+  // break-flow ADR-0002: whether pause() may pause a running Focus. Default off.
+  let allowPausingFocus = false;
 
   // Advances at most one phase boundary if the running phase's deadline has
   // passed. Any further elapsed time beyond that single boundary is discarded
@@ -103,21 +112,44 @@ export function createTimerEngine() {
     running = false;
     deadlineAt = null;
     phaseStarted = false;
+    startedAt = null;
     phaseFullMs = configuredMs(phase);
     remainingMs = phaseFullMs;
   }
 
+  // `now` may be the backdated true end of the Focus phase that just completed
+  // (break-flow ADR-0001): the deadline is then `now + full length`, so the remaining
+  // time is exact whenever the UI got round to starting the break.
   function start(now) {
     settle(now);
     if (running) return; // AC-01b: already running — no-op, no reset
+    if (!phaseStarted) startedAt = now; // a fresh start; a resume keeps the original
     deadlineAt = now + remainingMs;
     running = true;
     phaseStarted = true;
   }
 
+  // break-flow AC-04/AC-05: ends a break — running, paused or waiting — and starts the next
+  // Focus at the current Configured duration, with no completion record and no focusCount
+  // change (a Skipped break adds and removes nothing, AC-04b). A no-op inside the Skip guard
+  // and in any Focus state (Start focus on a waiting Focus goes through start()).
+  function startFocus(now) {
+    settle(now);
+    if (phase === PHASES.FOCUS) return;
+    if (isSkipGuardActive({ phase, startedAt }, now)) return;
+    phase = PHASES.FOCUS;
+    phaseFullMs = configuredMs(phase);
+    remainingMs = phaseFullMs;
+    deadlineAt = now + phaseFullMs;
+    running = true;
+    phaseStarted = true;
+    startedAt = now;
+  }
+
   function pause(now) {
     settle(now);
     if (!running) return; // AC-02b: not running — no-op
+    if (phase === PHASES.FOCUS && !allowPausingFocus) return; // AC-15: no pausing a Focus
     remainingMs = clampRemaining(phaseFullMs, deadlineAt - now);
     running = false;
     deadlineAt = null;
@@ -128,6 +160,7 @@ export function createTimerEngine() {
     running = false;
     deadlineAt = null;
     phaseStarted = false;
+    startedAt = null;
     phaseFullMs = configuredMs(phase);
     remainingMs = phaseFullMs;
   }
@@ -158,6 +191,11 @@ export function createTimerEngine() {
     if (isWholeNumberInRange(n, CYCLE_LENGTH_MIN, CYCLE_LENGTH_MAX)) cycleLength = n;
   }
 
+  // break-flow AC-15/AC-16: coerced to a boolean; never throws.
+  function setAllowPausingFocus(on) {
+    allowPausingFocus = Boolean(on);
+  }
+
   function getSnapshot(now) {
     settle(now);
     const remaining = running ? clampRemaining(phaseFullMs, deadlineAt - now) : remainingMs;
@@ -178,10 +216,23 @@ export function createTimerEngine() {
       // measures against it) and the one-shot completion record.
       phaseFullMs,
       justCompleted: consumedCompletionRecord,
+      // break-flow ADR-0002: when this phase freshly started (null while waiting), and the
+      // focus-pause policy, so the UI lays out its controls from the snapshot alone.
+      startedAt,
+      allowPausingFocus,
     });
   }
 
-  return Object.freeze({ start, pause, reset, getSnapshot, setConfiguredDurations, setCycleLength });
+  return Object.freeze({
+    start,
+    startFocus,
+    pause,
+    reset,
+    getSnapshot,
+    setConfiguredDurations,
+    setCycleLength,
+    setAllowPausingFocus,
+  });
 }
 
 // Pure control-enablement mapping (AC-02): the Pause control is disabled

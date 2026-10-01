@@ -6,7 +6,7 @@
 | # | Task | Layer | Owner | Estimate | Blocked by | Status |
 |---|---|---|---|---|---|---|
 | T1 | Add pure On-time, Skip-guard and stored-toggle rules in src/logic/controls.js | domain | sergii.kushnir@gmail.com | S | — | done |
-| T2 | Extend the engine: startedAt, startFocus(now), setAllowPausingFocus(on) and the focus-pause policy | domain | sergii.kushnir@gmail.com | M | T1 | todo |
+| T2 | Extend the engine: startedAt, startFocus(now), setAllowPausingFocus(on) and the focus-pause policy | domain | sergii.kushnir@gmail.com | M | T1 | done |
 | T3 | Add the pure controlLayout(snapshot, now) rule and phase-named CONTROL_LABELS | domain | sergii.kushnir@gmail.com | M | T1 | todo |
 | T4 | Build createControls(onAction): three fixed slot buttons and the keyboard-focus rule | ui | sergii.kushnir@gmail.com | M | T3 | todo |
 | T5 | Add the Auto-start breaks and Allow pausing focus toggles with a third storage gatekeeper | ui | sergii.kushnir@gmail.com | M | T1, T2 | todo |

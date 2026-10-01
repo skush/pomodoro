@@ -14,6 +14,7 @@ describe('syncWakeup (AC-06, AC-06b, AC-07)', () => {
   test('Start or Resume: a running snapshot arms the wake-up for the remaining time', () => {
     const engine = createTimerEngine();
     const wake = fakeWakeup();
+    engine.setAllowPausingFocus(true); // break-flow AC-16: Focus may be paused
     engine.start(0);
     syncWakeup(engine.getSnapshot(0), wake);
     assert.deepEqual(wake.calls, [['arm', 25 * MIN]]);
@@ -26,6 +27,7 @@ describe('syncWakeup (AC-06, AC-06b, AC-07)', () => {
   test('Pause and Reset cancel the wake-up', () => {
     const engine = createTimerEngine();
     const wake = fakeWakeup();
+    engine.setAllowPausingFocus(true); // break-flow AC-16: Focus may be paused
     engine.start(0);
     engine.pause(MIN);
     syncWakeup(engine.getSnapshot(MIN), wake);
