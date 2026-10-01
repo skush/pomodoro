@@ -36,3 +36,44 @@ export function validateStoredToggle(raw, fallback) {
   if (raw === 'false') return false;
   return fallback;
 }
+
+// AC-10: every control names the phase it acts on — no bare "Start"/"Pause"/"Resume"/"Reset".
+export const CONTROL_LABELS = Object.freeze({
+  startFocus: 'Start focus',
+  pauseFocus: 'Pause focus',
+  resumeFocus: 'Resume focus',
+  resetFocus: 'Reset focus',
+  startBreak: 'Start break',
+  pauseBreak: 'Pause break',
+  resumeBreak: 'Resume break',
+  resetBreak: 'Reset break',
+});
+
+function layout(main, side = [], mainGreyed = false) {
+  return Object.freeze({ main, side: Object.freeze(side), mainGreyed });
+}
+
+// AC-06/AC-08/AC-10: the controls a snapshot shows, as {main, side: [a, b], mainGreyed}.
+// `main` is the action in the main position (null = empty), `side` the up-to-two actions
+// beside it, `mainGreyed` true only for Start focus inside the Skip guard. A slot with no
+// action is simply absent — a control the settings never allow is hidden, not greyed.
+//
+// The arrangement keeps the pause toggle always at side[0] and Reset break always at
+// side[1] (a pause/resume pair therefore shares one slot, AC-11), so after Reset break
+// the Start focus beside Start break sits at side[0] — never where Reset break was.
+// A paused Focus keeps Resume + Reset even if the policy has since gone off: a phase in
+// progress is never altered by a setting.
+export function controlLayout(snapshot, now) {
+  if (!snapshot || typeof snapshot !== 'object') return layout('startFocus');
+  const { phase, running } = snapshot;
+  const waiting = snapshot.idle === true;
+
+  if (phase === 'focus' || phase === undefined) {
+    if (waiting) return layout('startFocus');
+    if (running) return layout(snapshot.allowPausingFocus ? 'pauseFocus' : null, ['resetFocus']);
+    return layout('resumeFocus', ['resetFocus']);
+  }
+
+  if (waiting) return layout('startBreak', ['startFocus']);
+  return layout('startFocus', [running ? 'pauseBreak' : 'resumeBreak', 'resetBreak'], isSkipGuardActive(snapshot, now));
+}

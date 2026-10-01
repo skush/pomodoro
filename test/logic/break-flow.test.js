@@ -9,6 +9,8 @@ import {
   isOnTimeCompletion,
   isSkipGuardActive,
   validateStoredToggle,
+  controlLayout,
+  CONTROL_LABELS,
   PHASES,
 } from '../../src/logic/index.js';
 
@@ -73,4 +75,125 @@ test('validateStoredToggle: anything else falls back, nothing thrown (AC-09)', (
     assert.equal(validateStoredToggle(raw, true), true, `fallback true for ${String(raw)}`);
     assert.equal(validateStoredToggle(raw, false), false, `fallback false for ${String(raw)}`);
   }
+});
+
+// ---- T3: controlLayout + CONTROL_LABELS (spec.md AC-06, AC-08, AC-10) ----
+
+const T0 = 7_000_000;
+// A snapshot-shaped plain object: phase, run-state, startedAt and the focus-pause policy.
+function snap({ phase, state, allow = false, startedAt = null }) {
+  return {
+    phase,
+    running: state === 'running',
+    idle: state === 'waiting',
+    startedAt: state === 'waiting' ? null : startedAt,
+    allowPausingFocus: allow,
+  };
+}
+
+const L = (main, side, mainGreyed = false) => ({ main, side, mainGreyed });
+
+test('CONTROL_LABELS: every action is phase-named — no bare Start/Pause/Resume/Reset (AC-10)', () => {
+  assert.deepEqual(CONTROL_LABELS, {
+    startFocus: 'Start focus',
+    pauseFocus: 'Pause focus',
+    resumeFocus: 'Resume focus',
+    resetFocus: 'Reset focus',
+    startBreak: 'Start break',
+    pauseBreak: 'Pause break',
+    resumeBreak: 'Resume break',
+    resetBreak: 'Reset break',
+  });
+  assert.equal(Object.isFrozen(CONTROL_LABELS), true);
+  for (const label of Object.values(CONTROL_LABELS)) {
+    assert.doesNotMatch(label, /^(Start|Pause|Resume|Reset)$/);
+  }
+});
+
+test('controlLayout: the AC-10 table, every phase × run-state × guard × policy combination', () => {
+  const inGuard = T0 + 1000;
+  const outOfGuard = T0 + 3000;
+  const cases = [];
+  // Focus: the guard never applies; waiting ignores the policy.
+  for (const allow of [false, true]) {
+    cases.push([{ phase: PHASES.FOCUS, state: 'waiting', allow }, outOfGuard, L('startFocus', [])]);
+    cases.push([
+      { phase: PHASES.FOCUS, state: 'running', startedAt: T0, allow },
+      inGuard,
+      L(allow ? 'pauseFocus' : null, ['resetFocus']),
+    ]);
+    // A paused Focus stays paused (resume + reset) even if the policy has since gone off.
+    cases.push([{ phase: PHASES.FOCUS, state: 'paused', startedAt: T0, allow }, outOfGuard, L('resumeFocus', ['resetFocus'])]);
+  }
+  for (const phase of [PHASES.SHORT_BREAK, PHASES.LONG_BREAK]) {
+    for (const allow of [false, true]) {
+      cases.push([{ phase, state: 'waiting', allow }, outOfGuard, L('startBreak', ['startFocus'])]);
+      cases.push([{ phase, state: 'running', startedAt: T0, allow }, inGuard, L('startFocus', ['pauseBreak', 'resetBreak'], true)]);
+      cases.push([{ phase, state: 'running', startedAt: T0, allow }, outOfGuard, L('startFocus', ['pauseBreak', 'resetBreak'])]);
+      cases.push([{ phase, state: 'paused', startedAt: T0, allow }, inGuard, L('startFocus', ['resumeBreak', 'resetBreak'], true)]);
+      cases.push([{ phase, state: 'paused', startedAt: T0, allow }, outOfGuard, L('startFocus', ['resumeBreak', 'resetBreak'])]);
+    }
+  }
+  for (const [input, now, expected] of cases) {
+    // 'paused' = started but not running (not idle)
+    const s = { ...snap(input), running: input.state === 'running', idle: input.state === 'waiting' };
+    assert.deepEqual(controlLayout(s, now), expected, JSON.stringify({ ...input, now: now - T0 }));
+  }
+  assert.equal(cases.length, 2 * 3 + 2 * 2 * 5);
+});
+
+test('controlLayout: the result is frozen, side included', () => {
+  const layout = controlLayout(snap({ phase: PHASES.SHORT_BREAK, state: 'running', startedAt: T0 }), T0);
+  assert.equal(Object.isFrozen(layout), true);
+  assert.equal(Object.isFrozen(layout.side), true);
+});
+
+test('controlLayout: Start focus is greyed only inside the guard (AC-05, AC-10)', () => {
+  const states = ['waiting', 'running', 'paused'];
+  for (const phase of Object.values(PHASES)) {
+    for (const state of states) {
+      for (const dt of [0, 2999, 3000, 60_000]) {
+        for (const allow of [false, true]) {
+          const s = snap({ phase, state, startedAt: T0, allow });
+          const layout = controlLayout(s, T0 + dt);
+          const expectGrey = phase !== PHASES.FOCUS && state !== 'waiting' && dt < 3000;
+          assert.equal(layout.mainGreyed, expectGrey, `${phase}/${state}/${dt}`);
+          if (layout.mainGreyed) assert.equal(layout.main, 'startFocus');
+        }
+      }
+    }
+  }
+});
+
+test('controlLayout: Pause and Resume of one phase sit at the same index (AC-11 toggle)', () => {
+  const idx = (layout, action) => layout.side.indexOf(action);
+  const brk = (state) => controlLayout(snap({ phase: PHASES.SHORT_BREAK, state, startedAt: T0 }), T0 + 5000);
+  assert.equal(idx(brk('running'), 'pauseBreak'), idx(brk('paused'), 'resumeBreak'));
+  assert.notEqual(idx(brk('running'), 'pauseBreak'), -1);
+  const foc = (state) => controlLayout(snap({ phase: PHASES.FOCUS, state, startedAt: T0, allow: true }), T0 + 5000);
+  assert.equal(foc('running').main, 'pauseFocus');
+  assert.equal(foc('paused').main, 'resumeFocus'); // main slot in both states
+});
+
+test('controlLayout: after Reset break, Start focus never lands where Reset break was (AC-10)', () => {
+  const running = controlLayout(snap({ phase: PHASES.LONG_BREAK, state: 'running', startedAt: T0 }), T0 + 5000);
+  const waiting = controlLayout(snap({ phase: PHASES.LONG_BREAK, state: 'waiting' }), T0 + 5000);
+  const resetSlot = running.side.indexOf('resetBreak');
+  assert.notEqual(resetSlot, -1);
+  assert.notEqual(waiting.side.indexOf('startFocus'), resetSlot);
+  assert.equal(waiting.side[resetSlot], undefined);
+});
+
+test('controlLayout: only Start focus is ever greyed out, and a waiting phase has no pause/reset', () => {
+  for (const phase of Object.values(PHASES)) {
+    const layout = controlLayout(snap({ phase, state: 'waiting' }), T0);
+    for (const action of [layout.main, ...layout.side]) {
+      assert.doesNotMatch(String(action), /^(pause|resume|reset)/);
+    }
+  }
+});
+
+test('controlLayout: fail-soft on a bad snapshot', () => {
+  assert.doesNotThrow(() => controlLayout(null, T0));
+  assert.doesNotThrow(() => controlLayout({}, T0));
 });
